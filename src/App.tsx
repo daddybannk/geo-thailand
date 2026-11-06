@@ -107,8 +107,8 @@ const formatHalfScoreDistance = (scaleKm: number) => {
   const km = scaleKm * Math.LN2
   return km < 1 ? `${Math.round(km * 1000).toLocaleString()} ม.` : `${km.toLocaleString(undefined, { maximumFractionDigits: km < 10 ? 1 : 0 })} กม.`
 }
-// ไม่เกิน 2 กม. แสดงเป็นเมตร
-const formatDistance = (km: number) => km <= 2
+// ไม่เกิน 5 กม. แสดงเป็นเมตร
+const formatDistance = (km: number) => km <= 5
   ? `${Math.round(km * 1000).toLocaleString()} ม.`
   : `${km.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.`
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
