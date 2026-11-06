@@ -6,10 +6,10 @@ export const TIME_LIMITS = [0, 30, 60, 90, 120, 150, 180]
 // เวลาดูเฉลยก่อนไปรอบถัดไปอัตโนมัติ
 export const REVEAL_SECONDS = 30
 // ชื่อสุ่มเมื่อผู้เล่นไม่ได้ตั้งชื่อ
-export const AQUATIC_NAMES = [
-  'ปลาทู', 'ปลาบึก', 'ปลากัด', 'ปลานิล', 'ปลาหมึก', 'ปลาการ์ตูน', 'ปลาโลมา', 'ปลาวาฬ', 'ปลาฉลาม', 'ปลากระเบน',
-  'ปลาดาว', 'ปลาปักเป้า', 'ปลาทอง', 'ปลาช่อน', 'ปลาตะเพียน', 'ปลาสลิด', 'ปลาไหล', 'ม้าน้ำ', 'เต่าทะเล', 'แมงกะพรุน',
-  'ปูม้า', 'กุ้งมังกร', 'หอยเชลล์', 'พะยูน', 'แมวน้ำ', 'นากทะเล', 'ปลาฉลามวาฬ', 'ปลากระเบนราหู', 'ปลิงทะเล', 'กุ้งก้ามกราม',
+export const LAND_ANIMAL_NAMES = [
+  'ช้าง', 'เสือ', 'สิงโต', 'ม้าลาย', 'ยีราฟ', 'แรด', 'ฮิปโป', 'หมีควาย', 'แพนด้า', 'จิงโจ้',
+  'กระต่าย', 'กระรอก', 'เม่น', 'ลิง', 'ชะนี', 'อูฐ', 'ควาย', 'วัว', 'แพะ', 'แกะ',
+  'หมาป่า', 'จิ้งจอก', 'กวาง', 'เก้ง', 'กระทิง', 'เสือดาว', 'แมวป่า', 'นกยูง', 'ไก่ป่า', 'ตัวนิ่ม',
 ]
 const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -176,8 +176,8 @@ export async function lookupAddress({ lat, lng }) {
 function pickPlayerName(name, room, random = Math.random) {
   if (name) return name
   const taken = new Set(room ? [...room.players.values()].map((player) => player.name) : [])
-  const available = AQUATIC_NAMES.filter((candidate) => !taken.has(candidate))
-  const pool = available.length ? available : AQUATIC_NAMES
+  const available = LAND_ANIMAL_NAMES.filter((candidate) => !taken.has(candidate))
+  const pool = available.length ? available : LAND_ANIMAL_NAMES
   return pool[Math.floor(random() * pool.length)]
 }
 

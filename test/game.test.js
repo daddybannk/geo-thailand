@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { Server } from 'socket.io'
 import { io as createClient } from 'socket.io-client'
-import { AQUATIC_NAMES, distanceInKm, scoreForDistance, scoreScaleFor, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
+import { LAND_ANIMAL_NAMES, distanceInKm, scoreForDistance, scoreScaleFor, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
 
 const provinces = JSON.parse(readFileSync(new URL('../public/data/provinces.geojson', import.meta.url))).features
 const districts = JSON.parse(readFileSync(new URL('../public/data/districts.geojson', import.meta.url))).features
@@ -275,7 +275,7 @@ test('players can join a game in progress but not a solo or finished game', asyn
   assert.equal((await sendWithAck(other, 'room:join', { name: 'Too late', roomCode: created.roomCode })).ok, false)
 })
 
-test('players without a name get distinct random aquatic animal names', async (context) => {
+test('players without a name get distinct random land animal names', async (context) => {
   const httpServer = createServer()
   const ioServer = new Server(httpServer)
   registerGameHandlers(ioServer, provinces, { findAddress: async () => null })
@@ -301,7 +301,7 @@ test('players without a name get distinct random aquatic animal names', async (c
   assert.ok(names.includes('Ben'))
   const randomNames = names.filter((name) => name !== 'Ben')
   assert.equal(randomNames.length, 3)
-  assert.ok(randomNames.every((name) => AQUATIC_NAMES.includes(name)))
+  assert.ok(randomNames.every((name) => LAND_ANIMAL_NAMES.includes(name)))
   assert.equal(new Set(randomNames).size, randomNames.length)
 })
 

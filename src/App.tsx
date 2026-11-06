@@ -554,7 +554,7 @@ function App() {
                 <span className={`avatar avatar-${index % 4}`}>{player.name.slice(0, 1)}</span>
                 {player.id === playerId && nameDraft !== null ? (
                   <form className="rename-form" onSubmit={(event) => { event.preventDefault(); void saveName() }}>
-                    <input className="text-input" value={nameDraft} maxLength={18} autoFocus aria-label="ชื่อที่ใช้ในเกม" placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์น้ำ" onChange={(event) => setNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setNameDraft(null) }} />
+                    <input className="text-input" value={nameDraft} maxLength={18} autoFocus aria-label="ชื่อที่ใช้ในเกม" placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์บก" onChange={(event) => setNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setNameDraft(null) }} />
                     <button type="submit" className="icon-button" disabled={busy} aria-label="บันทึกชื่อ"><Check size={15} /></button>
                     <button type="button" className="icon-button" onClick={() => setNameDraft(null)} aria-label="ยกเลิกการแก้ชื่อ"><X size={15} /></button>
                   </form>
@@ -787,7 +787,7 @@ function App() {
         <div className="setup-card">
           <div className="setup-fields">
             <label className="field-label" htmlFor="player-name">ชื่อที่ใช้ในเกม</label>
-            <input id="player-name" className="text-input" value={playerName} maxLength={18} placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์น้ำ" onChange={(event) => setPlayerName(event.target.value)} />
+            <input id="player-name" className="text-input" value={playerName} maxLength={18} placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์บก" onChange={(event) => setPlayerName(event.target.value)} />
             <div className="field-row">
               <div><label className="field-label" htmlFor="round-count">จำนวนรอบ</label><div className="select-wrap"><select id="round-count" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((count) => <option value={count} key={count}>{count} รอบ</option>)}</select><ChevronDown size={16} /></div></div>
               <div><label className="field-label" htmlFor="time-limit">เวลาต่อรอบ</label><div className="select-wrap"><select id="time-limit" value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))}>{TIME_LIMIT_OPTIONS.map((seconds) => <option value={seconds} key={seconds}>{formatTimeLimit(seconds)}</option>)}</select><ChevronDown size={16} /></div></div>
