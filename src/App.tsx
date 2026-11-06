@@ -506,7 +506,7 @@ function App() {
         <section className="lobby-card">
           <span className="eyebrow"><Radio size={14} /> ห้องพร้อมแล้ว</span>
           <h1>ชวนเพื่อนมาออกสำรวจกัน</h1>
-          <p>ส่งลิงก์หรือรหัสห้องให้เพื่อน แล้วรอให้ทุกคนเข้ามาก่อนเริ่มเกม</p>
+          <p>ส่งลิงก์หรือรหัสห้องให้เพื่อน เพื่อนเข้าร่วมได้ทั้งก่อนและระหว่างเกม</p>
           <button className="room-code-card" onClick={() => copyInvite('code')}>
             <small>รหัสห้อง</small><strong>{room.roomCode.split('').join(' ')}</strong>
             <span>{copied === 'code' ? <><Check size={14} /> คัดลอกแล้ว</> : <><Clipboard size={14} /> แตะเพื่อคัดลอก</>}</span>

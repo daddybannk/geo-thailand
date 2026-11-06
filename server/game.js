@@ -449,8 +449,12 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
       const config = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}
       const code = typeof config.roomCode === 'string' ? config.roomCode.trim().toUpperCase() : ''
       const room = rooms.get(code)
-      if (!room || room.phase !== 'lobby') {
-        return acknowledge?.({ ok: false, error: 'ไม่พบห้องนี้ หรือเกมเริ่มไปแล้ว' })
+      // เข้าระหว่างเกมได้ คนที่เข้ามาตอนเฉลยจะเริ่มเล่นรอบถัดไป
+      if (!room || room.solo) {
+        return acknowledge?.({ ok: false, error: 'ไม่พบห้องนี้' })
+      }
+      if (room.phase === 'finished') {
+        return acknowledge?.({ ok: false, error: 'เกมในห้องนี้จบไปแล้ว' })
       }
       if (room.players.size >= MAX_PLAYERS) {
         return acknowledge?.({ ok: false, error: 'ห้องนี้เต็มแล้ว (สูงสุด 8 คน)' })

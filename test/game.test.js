@@ -220,6 +220,42 @@ test('rounds start at a junction inside the room scope', async (context) => {
   assert.equal(target.provinceId, 'chiang-mai')
 })
 
+test('players can join a game in progress but not a solo or finished game', async (context) => {
+  const httpServer = createServer()
+  const ioServer = new Server(httpServer)
+  registerGameHandlers(ioServer, provinces, { findAddress: async () => null, msPerSecond: 5 })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const url = `http://127.0.0.1:${httpServer.address().port}`
+  const [host, guest, late, soloPlayer, other] = Array.from({ length: 5 }, () => createClient(url, { transports: ['websocket'] }))
+  context.after(async () => {
+    for (const client of [host, guest, late, soloPlayer, other]) client.disconnect()
+    await new Promise((resolve) => ioServer.close(resolve))
+  })
+  await Promise.all([host, guest, late, soloPlayer, other].map((client) => waitForEvent(client, 'connect')))
+
+  const solo = await sendWithAck(soloPlayer, 'room:create', { name: 'Solo', rounds: 1, timeLimit: 0, provinceId: null, solo: true })
+  assert.equal((await sendWithAck(other, 'room:join', { name: 'X', roomCode: solo.roomCode })).ok, false)
+
+  const created = await sendWithAck(host, 'room:create', { name: 'Host', rounds: 1, timeLimit: 0, provinceId: null, solo: false })
+  assert.equal((await sendWithAck(guest, 'room:join', { name: 'Guest', roomCode: created.roomCode })).ok, true)
+  assert.equal((await sendWithAck(host, 'game:start')).ok, true)
+  assert.equal((await sendWithAck(host, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, true)
+
+  const joined = await sendWithAck(late, 'room:join', { name: 'Late', roomCode: created.roomCode })
+  assert.equal(joined.ok, true)
+  assert.equal(joined.state.phase, 'playing')
+  assert.equal(joined.state.players.length, 3)
+  assert.equal((await sendWithAck(guest, 'game:guess', { lat: 14, lng: 100.5 })).ok, true)
+  const revealed = waitForState(host, (state) => state.phase === 'reveal')
+  assert.equal((await sendWithAck(late, 'game:guess', { lat: 15, lng: 100.5 })).ok, true)
+  assert.equal((await revealed).guesses.length, 3)
+
+  const finished = waitForState(host, (state) => state.phase === 'finished')
+  assert.equal((await sendWithAck(host, 'game:next')).ok, true)
+  await finished
+  assert.equal((await sendWithAck(other, 'room:join', { name: 'Too late', roomCode: created.roomCode })).ok, false)
+})
+
 test('players without a name get distinct random aquatic animal names', async (context) => {
   const httpServer = createServer()
   const ioServer = new Server(httpServer)
