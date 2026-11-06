@@ -134,7 +134,7 @@
 @media (prefers-reduced-motion: reduce) { .timer-pill.urgent { animation: none; } }
 @media (max-width: 640px) { .timer-pill { padding: 6px 8px; font-size: 10px; } }
 
-.score-modal-backdrop { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; padding: 16px; background: #1f2e2766; animation: score-fade .2s ease; }
+.score-modal-backdrop { position: absolute; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 16px; background: #1f2e2766; animation: score-fade .2s ease; }
 .score-modal { position: relative; width: min(460px, 100%); max-height: calc(100% - 32px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e6eae4; border-radius: 14px; background: #fffffff7; box-shadow: 0 18px 50px #1f2e2733; animation: score-rise .25s ease; }
 .score-modal-header { position: relative; padding: 18px 52px 14px 20px; border-bottom: 1px solid #edf0ec; }
 .score-modal-header small { color: #829087; font-size: 10px; font-weight: 600; }
