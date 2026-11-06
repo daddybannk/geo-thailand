@@ -10,6 +10,8 @@ const root = dirname(fileURLToPath(import.meta.url))
 const provincesPath = resolve(root, 'public/data/provinces.geojson')
 const provinces = JSON.parse(readFileSync(provincesPath, 'utf8')).features
 const districts = JSON.parse(readFileSync(resolve(root, 'public/data/districts.geojson'), 'utf8')).features
+const junctionsPath = resolve(root, 'data/junctions.json')
+const junctions = existsSync(junctionsPath) ? JSON.parse(readFileSync(junctionsPath, 'utf8')) : {}
 const subdistrictsPath = resolve(root, 'public/data/subdistricts')
 const subdistricts = readdirSync(subdistrictsPath)
   .filter((file) => file.endsWith('.geojson'))
@@ -48,7 +50,7 @@ app.get('/api/config', (_request, response) => {
   })
 })
 
-const getRoundView = registerGameHandlers(io, provinces, { districts, subdistricts })
+const getRoundView = registerGameHandlers(io, provinces, { districts, subdistricts, junctions })
 
 app.get('/api/round-view/:roomCode', (request, response) => {
   const view = getRoundView(request.params.roomCode)

@@ -231,8 +231,45 @@ function makePublicState(room) {
 }
 
 // msPerSecond ใช้ย่นเวลาในชุดทดสอบ
-export function registerGameHandlers(io, provinces, { districts = [], subdistricts = [], findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
+export function registerGameHandlers(io, provinces, { districts = [], subdistricts = [], junctions = {}, findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
   const rooms = new Map()
+  const junctionPools = new Map()
+
+  // จุดทางแยก (ไม่ใช่ทางตัน) ในขอบเขตของห้อง จาก data/junctions.json ที่แยกไว้ตามตำบล
+  function junctionPool(room) {
+    const key = room.subdistrict?.properties.id ?? room.district?.properties.id ?? room.scopeId ?? '*'
+    if (!junctionPools.has(key)) {
+      const inScope = subdistricts.filter((feature) => (
+        room.subdistrict ? feature === room.subdistrict
+          : room.district ? feature.properties.districtId === room.district.properties.id
+            : room.scopeId ? feature.properties.provinceId === room.scopeId
+              : true
+      ))
+      junctionPools.set(key, inScope.flatMap((feature) => {
+        const values = junctions[feature.properties.id] ?? []
+        return Array.from({ length: values.length / 2 }, (_, index) => ({ lat: values[index * 2], lng: values[index * 2 + 1], provinceId: feature.properties.provinceId }))
+      }))
+    }
+    return junctionPools.get(key)
+  }
+
+  function pickTarget(room) {
+    const pool = junctionPool(room)
+    if (pool.length) {
+      const junction = pool[randomInt(pool.length)]
+      const province = provinces.find((feature) => feature.properties.id === junction.provinceId)
+      return {
+        lat: junction.lat,
+        lng: junction.lng,
+        provinceId: province.properties.id,
+        provinceName: province.properties.name_th,
+        region: province.properties.region,
+      }
+    }
+    // ไม่มีข้อมูลทางแยกในขอบเขตนี้ ใช้การสุ่มจุดในพื้นที่แบบเดิม
+    const area = room.subdistrict ?? room.district
+    return area ? generateAreaLocation(area, provinces) : generateLocation(provinces, room.scopeId)
+  }
 
   function publish(room) {
     io.to(room.code).emit('room:state', makePublicState(room))
@@ -284,8 +321,7 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
         publish(room)
       }, room.timeLimit * msPerSecond)
     }
-    const area = room.subdistrict ?? room.district
-    room.target = area ? generateAreaLocation(area, provinces) : generateLocation(provinces, room.scopeId)
+    room.target = pickTarget(room)
     room.heading = randomInt(360)
     const target = room.target
     // ตำบลและอำเภอหาจากขอบเขตในเครื่องก่อน ใช้ Nominatim เฉพาะเมื่อหาไม่เจอ (เช่น จุดชิดชายฝั่งหรือแนวเขต)

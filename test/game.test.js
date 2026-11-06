@@ -179,6 +179,47 @@ test('subdistrict-scoped rooms validate the subdistrict and reveal names from lo
   assert.equal(nominatimCalls, 0)
 })
 
+test('junction data points sit inside their subdistricts', () => {
+  const junctions = JSON.parse(readFileSync(new URL('../data/junctions.json', import.meta.url)))
+  const byId = new Map(subdistricts.map((feature) => [feature.properties.id, feature]))
+  for (const [id, values] of Object.entries(junctions)) {
+    const subdistrict = byId.get(id)
+    assert.ok(subdistrict, `unknown subdistrict ${id}`)
+    assert.equal(values.length % 2, 0)
+    for (let index = 0; index < values.length; index += 2) {
+      assert.ok(pointInProvince({ lat: values[index], lng: values[index + 1] }, subdistrict), `junction outside ${subdistrict.properties.name_th}`)
+    }
+  }
+})
+
+test('rounds start at a junction inside the room scope', async (context) => {
+  const subdistrict = subdistricts.find((feature) => feature.properties.provinceId === 'chiang-mai')
+  const junction = { lat: 18.12345, lng: 98.54321 }
+  const httpServer = createServer()
+  const ioServer = new Server(httpServer)
+  registerGameHandlers(ioServer, provinces, {
+    districts,
+    subdistricts,
+    junctions: { [subdistrict.properties.id]: [junction.lat, junction.lng] },
+    findAddress: async () => null,
+  })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const client = createClient(`http://127.0.0.1:${httpServer.address().port}`, { transports: ['websocket'] })
+  context.after(async () => {
+    client.disconnect()
+    await new Promise((resolve) => ioServer.close(resolve))
+  })
+  await waitForEvent(client, 'connect')
+
+  const created = await sendWithAck(client, 'room:create', { name: 'Solo', rounds: 1, timeLimit: 0, provinceId: 'chiang-mai', solo: true })
+  assert.equal(created.ok, true)
+  const revealed = waitForState(client, (state) => state.phase === 'reveal')
+  assert.equal((await sendWithAck(client, 'game:guess', { lat: 18.79, lng: 98.98 })).ok, true)
+  const { target } = await revealed
+  assert.deepEqual({ lat: target.lat, lng: target.lng }, junction)
+  assert.equal(target.provinceId, 'chiang-mai')
+})
+
 test('players without a name get distinct random aquatic animal names', async (context) => {
   const httpServer = createServer()
   const ioServer = new Server(httpServer)
