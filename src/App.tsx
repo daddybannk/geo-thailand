@@ -43,7 +43,8 @@ type ProvinceCollection = FeatureCollection<Geometry, ProvinceProperties>
 type Point = { lat: number; lng: number }
 type Player = { id: string; name: string; score: number; hasGuessed: boolean; roundPoints: number }
 type GuessResult = Point & { playerId: string; name: string; distanceKm: number; points: number }
-type Target = Point & { provinceName: string; provinceId: string }
+type TargetAddress = { subdistrict: string | null; district: string | null }
+type Target = Point & { provinceName: string; provinceId: string; address?: TargetAddress | null }
 type RoomState = {
   roomCode: string
   hostId: string
@@ -53,7 +54,6 @@ type RoomState = {
   totalRounds: number
   scopeId: string | null
   scopeName: string
-  hint: string
   players: Player[]
   target?: Target
   guesses: GuessResult[]
@@ -73,6 +73,12 @@ type ClientEvents = {
 // ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
 const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
 const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
+function formatTargetLocation(target: Target) {
+  const province = target.provinceName === 'กรุงเทพมหานคร' ? target.provinceName : `จังหวัด${target.provinceName}`
+  if (target.address === undefined) return `${province} (กำลังค้นหาตำบลและอำเภอ...)`
+  return [target.address?.subdistrict, target.address?.district, province].filter(Boolean).join(' · ')
+}
+
 const guessIcon = L.divIcon({
   className: 'marker-wrapper',
   html: '<span class="game-marker guess-marker"><i></i></span>',
@@ -438,7 +444,7 @@ function App() {
         <section className="round-card">
           <div className="round-meta"><span>รอบที่ {room.currentRound} / {room.totalRounds}</span><span className="round-bars">{Array.from({ length: room.totalRounds }, (_, index) => <i key={index} className={index < room.currentRound ? 'active' : ''} />)}</span></div>
           <h1>{room.phase === 'finished' ? 'จบทริปแล้ว!' : reveal ? 'เฉลยตำแหน่ง' : 'จุดหมายอยู่ที่ไหน?'}</h1>
-          <p className="hint-text"><Sparkles size={14} />{reveal && target ? `คำตอบคือ ${target.provinceName}` : room.hint}</p>
+          {reveal && target && <p className="hint-text"><Sparkles size={14} />คำตอบคือ {formatTargetLocation(target)}</p>}
           <span className="scope-pill"><MapPin size={13} /> ขอบเขต: {room.scopeName}</span>
         </section>
         <aside className="scoreboard">

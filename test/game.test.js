@@ -26,7 +26,9 @@ test('distance calculations and province validation are well defined', () => {
 test('host and clients complete a multiplayer round without exposing the answer early', async (context) => {
   const httpServer = createServer()
   const ioServer = new Server(httpServer)
-  registerGameHandlers(ioServer, provinces)
+  registerGameHandlers(ioServer, provinces, {
+    findAddress: async () => ({ subdistrict: 'ตำบลทดสอบ', district: 'อำเภอทดสอบ' }),
+  })
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const address = httpServer.address()
   const url = `http://127.0.0.1:${address.port}`
@@ -62,12 +64,13 @@ test('host and clients complete a multiplayer round without exposing the answer 
   assert.ok(playingStates.every((state) => state.target === undefined))
 
   assert.equal((await sendWithAck(host, 'game:guess', null)).ok, false)
-  const hostReveal = waitForState(host, (state) => state.phase === 'reveal')
-  const guestReveal = waitForState(guest, (state) => state.phase === 'reveal')
+  const hostReveal = waitForState(host, (state) => state.phase === 'reveal' && state.target?.address)
+  const guestReveal = waitForState(guest, (state) => state.phase === 'reveal' && state.target?.address)
   assert.equal((await sendWithAck(host, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, true)
   assert.equal((await sendWithAck(guest, 'game:guess', { lat: 14.25, lng: 100.5 })).ok, true)
   const revealed = await Promise.all([hostReveal, guestReveal])
   assert.ok(revealed.every((state) => state.target && state.guesses.length === 2))
+  assert.ok(revealed.every((state) => state.target.address.subdistrict === 'ตำบลทดสอบ' && state.target.address.district === 'อำเภอทดสอบ'))
   assert.ok(revealed.every((state) => state.players.every((player) => player.score > 0)))
 
   const hostFinished = waitForState(host, (state) => state.phase === 'finished')

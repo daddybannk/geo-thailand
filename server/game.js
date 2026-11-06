@@ -2,14 +2,6 @@ import { randomInt, randomUUID } from 'node:crypto'
 
 const MAX_PLAYERS = 8
 const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-const REGION_LABELS = {
-  north: 'ภาคเหนือ',
-  northeast: 'ภาคอีสาน',
-  central: 'ภาคกลาง',
-  east: 'ภาคตะวันออก',
-  west: 'ภาคตะวันตก',
-  south: 'ภาคใต้',
-}
 
 function polygonsFor(feature) {
   return feature.geometry.type === 'Polygon'
@@ -97,25 +89,36 @@ export function distanceInKm(first, second) {
   return 6371 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc))
 }
 
-function compassDirection(origin, destination) {
-  const northSouth = destination.lat - origin.lat
-  const eastWest = destination.lng - origin.lng
-  if (Math.abs(northSouth) > Math.abs(eastWest) * 1.4) return northSouth > 0 ? 'เหนือ' : 'ใต้'
-  if (Math.abs(eastWest) > Math.abs(northSouth) * 1.4) return eastWest > 0 ? 'ตะวันออก' : 'ตะวันตก'
-  if (northSouth >= 0) return eastWest >= 0 ? 'ตะวันออกเฉียงเหนือ' : 'ตะวันตกเฉียงเหนือ'
-  return eastWest >= 0 ? 'ตะวันออกเฉียงใต้' : 'ตะวันตกเฉียงใต้'
+function findAddressPart(address, prefixes) {
+  const values = Object.values(address)
+  for (const prefix of prefixes) {
+    const match = values.find((value) => typeof value === 'string' && value.startsWith(prefix))
+    if (match) return match
+  }
+  return null
 }
 
-function makeHint(target, feature, scopeId) {
-  const bounds = boundsFor(polygonsFor(feature).flatMap((polygon) => polygon[0]))
-  const center = { lat: (bounds.minLat + bounds.maxLat) / 2, lng: (bounds.minLng + bounds.maxLng) / 2 }
-  const distance = distanceInKm(center, target)
-  const distanceBand = distance < 25 ? 'ไม่เกิน 25 กม.' : distance < 75 ? '25–75 กม.' : 'มากกว่า 75 กม.'
-  const direction = compassDirection(center, target)
-  const region = REGION_LABELS[feature.properties.region] ?? 'ประเทศไทย'
-  return scopeId
-    ? `จุดหมายอยู่ทาง${direction}จากใจกลางจังหวัด · ห่างประมาณ${distanceBand}`
-    : `อยู่ใน${region} · จุดหมายอยู่ทาง${direction}จากใจกลางจังหวัด`
+// ค้นหาตำบลและอำเภอของจุดหมายจาก OpenStreetMap Nominatim (จำกัด 1 request/วินาที ใช้แค่รอบละครั้ง)
+export async function lookupAddress({ lat, lng }) {
+  const parameters = new URLSearchParams({
+    format: 'jsonv2',
+    lat: String(lat),
+    lon: String(lng),
+    zoom: '14',
+    addressdetails: '1',
+    'accept-language': 'th',
+  })
+  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${parameters.toString()}`, {
+    headers: { 'User-Agent': 'geo-thailand-game/1.0' },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) throw new Error(`Nominatim ตอบกลับ ${response.status}`)
+  const address = (await response.json()).address ?? {}
+  return {
+    // บางพื้นที่ OSM ไม่มีขอบเขตตำบล จึงใช้ชื่อหมู่บ้านแทน
+    subdistrict: findAddressPart(address, ['ตำบล', 'แขวง']) ?? address.village ?? null,
+    district: findAddressPart(address, ['อำเภอ', 'เขต']),
+  }
 }
 
 function makeRoomCode(rooms) {
@@ -139,7 +142,6 @@ function makePublicState(room) {
     scopeName: room.scopeId
       ? room.provinces.find((feature) => feature.properties.id === room.scopeId).properties.name_th
       : 'สุ่มทั่วประเทศไทย',
-    hint: room.hint,
     players: [...room.players.values()].map(({ id, name, score, guess, roundPoints }) => ({
       id,
       name,
@@ -153,6 +155,7 @@ function makePublicState(room) {
         lng: room.target.lng,
         provinceName: room.target.provinceName,
         provinceId: room.target.provinceId,
+        address: room.target.address,
       },
       guesses: [...room.players.values()]
         .filter((player) => player.guess)
@@ -168,7 +171,7 @@ function makePublicState(room) {
   }
 }
 
-export function registerGameHandlers(io, provinces) {
+export function registerGameHandlers(io, provinces, { findAddress = lookupAddress } = {}) {
   const rooms = new Map()
 
   function publish(room) {
@@ -179,7 +182,15 @@ export function registerGameHandlers(io, provinces) {
     room.phase = 'playing'
     room.target = generateLocation(provinces, room.scopeId)
     room.heading = randomInt(360)
-    room.hint = makeHint(room.target, provinces.find((feature) => feature.properties.id === room.target.provinceId), room.scopeId)
+    const target = room.target
+    // undefined = กำลังค้นหา, null = ค้นหาไม่สำเร็จ
+    target.address = undefined
+    findAddress(target)
+      .catch(() => null)
+      .then((address) => {
+        target.address = address
+        if (room.target === target && (room.phase === 'reveal' || room.phase === 'finished')) publish(room)
+      })
     for (const player of room.players.values()) {
       player.guess = null
       player.distanceKm = null
@@ -237,7 +248,6 @@ export function registerGameHandlers(io, provinces) {
         currentRound: solo ? 1 : 0,
         totalRounds: rounds,
         scopeId,
-        hint: '',
         target: null,
         players: new Map([[playerId, {
           id: playerId,
