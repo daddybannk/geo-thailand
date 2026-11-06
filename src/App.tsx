@@ -156,7 +156,7 @@ function FitMapToScope({ feature, resetKey }: { feature?: Feature; resetKey: str
   useEffect(() => {
     if (feature) {
       const bounds = L.geoJSON(feature).getBounds()
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [70, 70], maxZoom: 9, animate: false })
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [70, 70], maxZoom: 13, animate: false })
     } else {
       map.fitBounds([[5.2, 97.2], [20.7, 105.8]], { padding: [35, 35], animate: false })
     }
@@ -583,10 +583,12 @@ function App() {
             </button>
           </div>
           <div className="guess-map-canvas">
-            <MapContainer center={[15.8, 101]} zoom={5} zoomControl minZoom={4} maxZoom={13} scrollWheelZoom>
+            <MapContainer center={[15.8, 101]} zoom={5} zoomControl minZoom={4} maxZoom={19} scrollWheelZoom>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attribution/">CARTO</a>'
                 url={cartoTileUrl}
+                maxZoom={19}
+                maxNativeZoom={18}
               />
               {provinces && <LeafletGeoJSON
                 data={provinces}
