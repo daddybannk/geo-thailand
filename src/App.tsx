@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import {
   ArrowLeft,
@@ -32,6 +32,7 @@ import {
   Marker,
   Polyline,
   TileLayer,
+  Tooltip,
   useMap,
   useMapEvents,
 } from 'react-leaflet'
@@ -97,6 +98,27 @@ const guessIcon = L.divIcon({
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 })
+const PLAYER_COLORS = ['#4b7667', '#b8774f', '#6e6c9a', '#4f8a86']
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`)
+// หมุดของผู้เล่นแต่ละคนตอนเฉลย สีตรงกับ avatar ในตารางคะแนน
+const playerGuessIcon = (name: string, colorIndex: number, isMe: boolean) => L.divIcon({
+  className: 'marker-wrapper',
+  html: `<span class="game-marker player-marker ${isMe ? 'me' : ''}" style="background:${PLAYER_COLORS[colorIndex % PLAYER_COLORS.length]}">${escapeHtml(name.slice(0, 1))}</span>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+})
+
+function FitRevealBounds({ points, resetKey }: { points: Point[]; resetKey: string }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points.length < 2) return
+    map.fitBounds(L.latLngBounds(points.map((point) => [point.lat, point.lng])), { padding: [45, 45], maxZoom: 12 })
+    // จัดมุมมองครั้งเดียวต่อการเฉลยแต่ละรอบ ไม่ซูมใหม่ทุกครั้งที่ state ถูกส่งซ้ำ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, resetKey])
+  return null
+}
+
 const targetIcon = L.divIcon({
   className: 'marker-wrapper',
   html: '<span class="game-marker target-marker">★</span>',
@@ -471,6 +493,8 @@ function App() {
     const reveal = room.phase === 'reveal' || room.phase === 'finished'
     const target = room.target
     const rankedPlayers = [...room.players].sort((a, b) => b.score - a.score)
+    // สีประจำตัวตามลำดับการเข้าห้อง ให้หมุดบนแผนที่กับตารางคะแนนสีตรงกัน
+    const playerColorIndex = (id: string) => Math.max(0, room.players.findIndex((player) => player.id === id)) % PLAYER_COLORS.length
     const phaseKey = `${currentRoundKey}-${room.phase}`
     const scoresOpen = reveal && scoresHidden !== phaseKey
     const lastRound = room.currentRound >= room.totalRounds
@@ -527,7 +551,7 @@ function App() {
           <div className="scoreboard-title"><span><Medal size={15} /> คะแนนรวม</span><small>{room.players.length} คน</small></div>
           {rankedPlayers.map((player, index) => (
             <div className={`score-row ${player.id === playerId ? 'current-player' : ''}`} key={player.id}>
-              <span className={`rank rank-${index + 1}`}>{index + 1}</span><span className={`avatar avatar-${index % 4}`}>{player.name.slice(0, 1)}</span>
+              <span className={`rank rank-${index + 1}`}>{index + 1}</span><span className={`avatar avatar-${playerColorIndex(player.id)}`}>{player.name.slice(0, 1)}</span>
               <span className="score-name">{player.name}{player.id === playerId && <small>คุณ</small>}</span><b>{player.score.toLocaleString()}</b>
             </div>
           ))}
@@ -565,12 +589,25 @@ function App() {
               <FitMapToScope feature={selectedFeature} resetKey={room.roomCode} />
               <InvalidateMapSize resetKey={`${room.roomCode}-${mapExpanded}`} />
               <MapClickHandler disabled={!canGuess || busy} onSelect={setGuess} />
-              {guess && <Marker position={[guess.lat, guess.lng]} icon={guessIcon} />}
-              {reveal && target && <Marker position={[target.lat, target.lng]} icon={targetIcon} />}
-              {reveal && target && guess && <Polyline
-                positions={[[guess.lat, guess.lng], [target.lat, target.lng]]}
-                pathOptions={{ color: '#cf7954', weight: 3, dashArray: '7 8', opacity: 0.8 }}
-              />}
+              {!reveal && guess && <Marker position={[guess.lat, guess.lng]} icon={guessIcon} />}
+              {reveal && target && room.guesses.map((result) => {
+                const isMe = result.playerId === playerId
+                return (
+                  <Fragment key={result.playerId}>
+                    <Polyline
+                      positions={[[result.lat, result.lng], [target.lat, target.lng]]}
+                      pathOptions={{ color: isMe ? '#cf7954' : '#7d8f85', weight: isMe ? 3 : 2, dashArray: '7 8', opacity: isMe ? 0.85 : 0.55 }}
+                    />
+                    <Marker position={[result.lat, result.lng]} icon={playerGuessIcon(result.name, playerColorIndex(result.playerId), isMe)} zIndexOffset={isMe ? 500 : 0}>
+                      <Tooltip direction="top" offset={[0, -14]} permanent className="player-tooltip">
+                        {isMe ? 'คุณ' : result.name} · {result.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.
+                      </Tooltip>
+                    </Marker>
+                  </Fragment>
+                )
+              })}
+              {reveal && target && <Marker position={[target.lat, target.lng]} icon={targetIcon} zIndexOffset={1000} />}
+              {reveal && target && <FitRevealBounds points={[target, ...room.guesses]} resetKey={currentRoundKey} />}
             </MapContainer>
           </div>
         </section>
@@ -610,7 +647,7 @@ function App() {
                   return (
                     <li className={`score-table-row ${player.id === playerId ? 'current-player' : ''}`} key={player.id}>
                       <span className={`rank rank-${index + 1}`}>{index + 1}</span>
-                      <span className={`avatar avatar-${index % 4}`}>{player.name.slice(0, 1)}</span>
+                      <span className={`avatar avatar-${playerColorIndex(player.id)}`}>{player.name.slice(0, 1)}</span>
                       <span className="score-table-name">{player.name}{player.id === playerId && <small>คุณ</small>}</span>
                       {room.phase !== 'finished' && <span className="score-table-round">{result ? <><b>+{result.points.toLocaleString()}</b><small>{result.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.</small></> : <small>ไม่ได้ตอบ</small>}</span>}
                       <b className="score-table-total">{player.score.toLocaleString()}</b>
