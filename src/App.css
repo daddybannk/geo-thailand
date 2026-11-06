@@ -36,7 +36,7 @@
 .section-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 23px; letter-spacing: -.7px; font-weight: 600; }.section-step { display: inline-flex; align-items: center; gap: 9px; padding-bottom: 4px; color: #9aa39b; font-size: 10px; letter-spacing: .8px; }.section-step i { width: 30px; border-top: 1px solid #d5ddd6; }
 .setup-card { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; padding: 25px; border: 1px solid #e7eae4; border-radius: 15px; background: white; box-shadow: 0 7px 25px #3b594409; }.setup-fields { min-width: 0; }
 .field-label { display: block; margin-bottom: 7px; color: #4b5a51; font-size: 11px; font-weight: 600; }.text-input, .select-wrap select { width: 100%; height: 41px; padding: 0 12px; outline: 0; border: 1px solid #e2e7e1; border-radius: 7px; color: #33423a; background: white; font-size: 12px; transition: .18s ease; }.text-input::placeholder { color: #aab1ab; }.text-input:focus, .select-wrap select:focus { border-color: #7b9b8b; box-shadow: 0 0 0 3px #759a8817; }
-.field-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 15px; margin-top: 15px; }.select-wrap { position: relative; }.select-wrap select { appearance: none; padding-right: 35px; cursor: pointer; }.select-wrap svg { position: absolute; top: 12px; right: 12px; color: #7d8c81; pointer-events: none; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }.field-row > :last-child { grid-column: 1 / -1; }.select-wrap { position: relative; }.select-wrap select { appearance: none; padding-right: 35px; cursor: pointer; }.select-wrap svg { position: absolute; top: 12px; right: 12px; color: #7d8c81; pointer-events: none; }
 .mode-tabs { display: flex; gap: 5px; margin-top: 19px; padding: 4px; border-radius: 8px; background: #f5f7f3; }.mode-tabs button { flex: 1; min-height: 35px; display: inline-flex; justify-content: center; align-items: center; gap: 7px; padding: 5px; border: 0; border-radius: 6px; color: #859087; background: transparent; font-size: 11px; transition: .2s ease; }.mode-tabs button.active { color: var(--green-dark); background: white; box-shadow: 0 1px 5px #354a3711; font-weight: 600; }
 .primary-button, .secondary-button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; font-size: 12px; font-weight: 600; transition: background .2s, transform .2s, box-shadow .2s; }
 .primary-button { color: white; background: var(--green); box-shadow: 0 5px 12px #396b5d1b; }.primary-button:not(:disabled):hover { background: var(--green-dark); box-shadow: 0 7px 16px #396b5d2b; transform: translateY(-1px); }
@@ -124,3 +124,11 @@
   .round-card { width: min(215px, calc(100vw - 145px)); }
   .scoreboard { width: 125px; }
 }
+
+.timer-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; border: 1px solid #e4e8e2; border-radius: 18px; color: #4f6a5d; background: #fffffff0; box-shadow: 0 3px 12px #3a493414; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.timer-pill svg { color: #749083; }
+.timer-pill.urgent { border-color: #efc4ae; color: #c0603a; background: #fff6f1; animation: timer-pulse 1s ease-in-out infinite; }
+.timer-pill.urgent svg { color: #c0603a; }
+@keyframes timer-pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .timer-pill.urgent { animation: none; } }
+@media (max-width: 640px) { .timer-pill { padding: 6px 8px; font-size: 10px; } }

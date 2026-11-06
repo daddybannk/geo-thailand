@@ -79,6 +79,36 @@ test('host and clients complete a multiplayer round without exposing the answer 
   assert.ok((await Promise.all([hostFinished, guestFinished])).every((state) => state.currentRound === 1))
 })
 
+test('timed rounds reveal automatically when time runs out', async (context) => {
+  const httpServer = createServer()
+  const ioServer = new Server(httpServer)
+  registerGameHandlers(ioServer, provinces, {
+    findAddress: async () => null,
+    msPerSecond: 5,
+  })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const client = createClient(`http://127.0.0.1:${httpServer.address().port}`, { transports: ['websocket'] })
+  context.after(async () => {
+    client.disconnect()
+    await new Promise((resolve) => ioServer.close(resolve))
+  })
+  await waitForEvent(client, 'connect')
+
+  const invalid = await sendWithAck(client, 'room:create', { name: 'Solo', rounds: 1, timeLimit: 45, provinceId: null, solo: true })
+  assert.equal(invalid.ok, false)
+
+  const revealed = waitForState(client, (state) => state.phase === 'reveal')
+  const created = await sendWithAck(client, 'room:create', { name: 'Solo', rounds: 1, timeLimit: 30, provinceId: null, solo: true })
+  assert.equal(created.ok, true)
+  assert.equal(created.state.timeLimit, 30)
+  assert.ok(created.state.roundEndsAt > created.state.serverNow)
+  const state = await revealed
+  assert.equal(state.roundEndsAt, null)
+  assert.equal(state.guesses.length, 0)
+  assert.equal(state.players[0].roundPoints, 0)
+  assert.equal((await sendWithAck(client, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, false)
+})
+
 function waitForEvent(socket, eventName) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${eventName}`)), 5000)

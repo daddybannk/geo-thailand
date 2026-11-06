@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   RotateCw,
   Send,
   Sparkles,
+  Timer,
   Users,
   X,
   ZoomIn,
@@ -52,6 +53,9 @@ type RoomState = {
   phase: 'lobby' | 'playing' | 'reveal' | 'finished'
   currentRound: number
   totalRounds: number
+  timeLimit: number
+  roundEndsAt: number | null
+  serverNow: number
   scopeId: string | null
   scopeName: string
   players: Player[]
@@ -62,7 +66,7 @@ type Ack<T = Record<string, never>> = { ok: boolean; error?: string } & T
 type CreateRoomResult = { roomCode: string; playerId: string; state: RoomState }
 type ServerEvents = { 'room:state': (state: RoomState) => void }
 type ClientEvents = {
-  'room:create': (config: { name: string; rounds: number; provinceId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
+  'room:create': (config: { name: string; rounds: number; timeLimit: number; provinceId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'room:join': (config: { name: string; roomCode: string }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'game:start': (ack: (response: Ack) => void) => void
   'game:guess': (point: Point, ack: (response: Ack) => void) => void
@@ -73,6 +77,9 @@ type ClientEvents = {
 // ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
 const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
 const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
+const TIME_LIMIT_OPTIONS = [30, 60, 90, 120, 0]
+const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
+
 function formatTargetLocation(target: Target) {
   const province = target.provinceName === 'กรุงเทพมหานคร' ? target.provinceName : `จังหวัด${target.provinceName}`
   if (target.address === undefined) return `${province} (กำลังค้นหาตำบลและอำเภอ...)`
@@ -141,6 +148,10 @@ function App() {
   const [playerId, setPlayerId] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [rounds, setRounds] = useState(5)
+  const [timeLimit, setTimeLimit] = useState(60)
+  const [now, setNow] = useState(() => Date.now())
+  // ส่วนต่างนาฬิกา server กับเครื่องนี้ เพื่อให้นับถอยหลังตรงกันทุกเครื่อง
+  const [clockOffset, setClockOffset] = useState(0)
   const [scopeId, setScopeId] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [showJoin, setShowJoin] = useState(false)
@@ -153,7 +164,10 @@ function App() {
   useEffect(() => {
     const onConnect = () => setConnected(true)
     const onDisconnect = () => setConnected(false)
-    const onRoomState = (state: RoomState) => setRoom(state)
+    const onRoomState = (state: RoomState) => {
+      setClockOffset(state.serverNow - Date.now())
+      setRoom(state)
+    }
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
     socket.on('room:state', onRoomState)
@@ -206,6 +220,14 @@ function App() {
   const myResult = room?.guesses.find((result) => result.playerId === playerId)
   const isHost = room?.hostId === playerId
   const canGuess = room?.phase === 'playing' && !myPlayer?.hasGuessed
+  const roundEndsAt = room?.phase === 'playing' ? room.roundEndsAt : null
+  const remainingMs = roundEndsAt ? Math.max(0, roundEndsAt - (now + clockOffset)) : null
+
+  useEffect(() => {
+    if (!roundEndsAt) return
+    const interval = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(interval)
+  }, [roundEndsAt])
   const canCreate = connected && Boolean(provinces) && !busy
   const currentRoundKey = room ? `${room.roomCode}-${room.currentRound}` : ''
   const currentViewControl = viewControl.roundKey === currentRoundKey
@@ -242,6 +264,7 @@ function App() {
       const response = await emitWithAck<CreateRoomResult>((ack) => socket.emit('room:create', {
         name: playerName.trim() || 'นักสำรวจ',
         rounds,
+        timeLimit,
         provinceId: scopeId || null,
         solo,
       }, ack))
@@ -294,6 +317,16 @@ function App() {
       setBusy(false)
     }
   }
+
+  // ส่งหมุดที่ปักไว้ให้อัตโนมัติก่อนหมดเวลา
+  const autoSubmitRound = useRef('')
+  useEffect(() => {
+    if (remainingMs === null || remainingMs > 1000 || !guess || !canGuess || busy || !room) return
+    const roundKey = `${room.roomCode}-${room.currentRound}`
+    if (autoSubmitRound.current === roundKey) return
+    autoSubmitRound.current = roundKey
+    void submitGuess()
+  })
 
   const nextRound = async () => {
     setBusy(true)
@@ -372,7 +405,7 @@ function App() {
             <small>รหัสห้อง</small><strong>{room.roomCode.split('').join(' ')}</strong>
             <span>{copied ? <><Check size={14} /> คัดลอกแล้ว</> : <><Clipboard size={14} /> แตะเพื่อคัดลอก</>}</span>
           </button>
-          <div className="lobby-settings"><span><MapPin size={15} />{room.scopeName}</span><span><Flag size={15} />{room.totalRounds} รอบ</span></div>
+          <div className="lobby-settings"><span><MapPin size={15} />{room.scopeName}</span><span><Flag size={15} />{room.totalRounds} รอบ</span><span><Timer size={15} />{formatTimeLimit(room.timeLimit)}</span></div>
           <div className="players-panel">
             <div className="players-heading">นักสำรวจในห้อง <small>{room.players.length} คน</small></div>
             {room.players.map((player, index) => (
@@ -439,6 +472,7 @@ function App() {
           <button className="back-button" onClick={leaveGame} aria-label="ออกจากเกม"><ArrowLeft size={18} /></button>
           <div className="game-brand"><span className="brand-mark"><Compass size={17} /></span> แผนที่ลับ</div>
           <span className="room-pill"><Users size={14} /> {room.roomCode}</span>
+          {remainingMs !== null && <span className={`timer-pill ${remainingMs <= 10000 ? 'urgent' : ''}`} role="timer" aria-label="เวลาที่เหลือ"><Timer size={14} /> {Math.floor(Math.ceil(remainingMs / 1000) / 60)}:{String(Math.ceil(remainingMs / 1000) % 60).padStart(2, '0')}</span>}
           <span className={`live-pill ${connected ? 'online' : ''}`}><i /> {connected ? 'เชื่อมต่อแล้ว' : 'ขาดการเชื่อมต่อ'}</span>
         </header>
         <section className="round-card">
@@ -543,6 +577,7 @@ function App() {
             <input id="player-name" className="text-input" value={playerName} maxLength={18} placeholder="เช่น นักเดินทาง" onChange={(event) => setPlayerName(event.target.value)} />
             <div className="field-row">
               <div><label className="field-label" htmlFor="round-count">จำนวนรอบ</label><div className="select-wrap"><select id="round-count" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((count) => <option value={count} key={count}>{count} รอบ</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="time-limit">เวลาต่อรอบ</label><div className="select-wrap"><select id="time-limit" value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))}>{TIME_LIMIT_OPTIONS.map((seconds) => <option value={seconds} key={seconds}>{formatTimeLimit(seconds)}</option>)}</select><ChevronDown size={16} /></div></div>
               <div><label className="field-label" htmlFor="province-scope">ขอบเขตจังหวัด</label><div className="select-wrap"><select id="province-scope" value={scopeId} onChange={(event) => setScopeId(event.target.value)} disabled={!provinces}><option value="">สุ่มทั่วประเทศไทย</option>{provinceOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{feature.properties.name_th}</option>)}</select><ChevronDown size={16} /></div></div>
             </div>
             {provinceError && <p className="error-text">{provinceError}</p>}

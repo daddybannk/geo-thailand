@@ -1,6 +1,8 @@
 import { randomInt, randomUUID } from 'node:crypto'
 
 const MAX_PLAYERS = 8
+// 0 = ไม่จับเวลา
+export const TIME_LIMITS = [0, 30, 60, 90, 120]
 const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 function polygonsFor(feature) {
@@ -138,6 +140,9 @@ function makePublicState(room) {
     phase: room.phase,
     currentRound: room.currentRound,
     totalRounds: room.totalRounds,
+    timeLimit: room.timeLimit,
+    roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
+    serverNow: Date.now(),
     scopeId: room.scopeId,
     scopeName: room.scopeId
       ? room.provinces.find((feature) => feature.properties.id === room.scopeId).properties.name_th
@@ -171,15 +176,32 @@ function makePublicState(room) {
   }
 }
 
-export function registerGameHandlers(io, provinces, { findAddress = lookupAddress } = {}) {
+// msPerSecond ใช้ย่นเวลาในชุดทดสอบ
+export function registerGameHandlers(io, provinces, { findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
   const rooms = new Map()
 
   function publish(room) {
     io.to(room.code).emit('room:state', makePublicState(room))
   }
 
+  function stopTimer(room) {
+    clearTimeout(room.timer)
+    room.timer = null
+    room.roundEndsAt = null
+  }
+
   function startRound(room) {
     room.phase = 'playing'
+    stopTimer(room)
+    if (room.timeLimit) {
+      room.roundEndsAt = Date.now() + room.timeLimit * msPerSecond
+      room.timer = setTimeout(() => {
+        if (room.phase !== 'playing') return
+        room.phase = 'reveal'
+        stopTimer(room)
+        publish(room)
+      }, room.timeLimit * msPerSecond)
+    }
     room.target = generateLocation(provinces, room.scopeId)
     room.heading = randomInt(360)
     const target = room.target
@@ -201,6 +223,7 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
   function revealIfEveryoneGuessed(room) {
     if (room.players.size && [...room.players.values()].every((player) => player.guess)) {
       room.phase = 'reveal'
+      stopTimer(room)
     }
   }
 
@@ -215,6 +238,7 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
     socket.data.playerId = null
 
     if (!room.players.size) {
+      stopTimer(room)
       rooms.delete(room.code)
       return
     }
@@ -231,8 +255,12 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
       const rounds = Number(config.rounds)
       const scopeId = typeof config.provinceId === 'string' ? config.provinceId : null
       const solo = config.solo === true
+      const timeLimit = config.timeLimit === undefined ? 0 : Number(config.timeLimit)
       if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) {
         return acknowledge?.({ ok: false, error: 'จำนวนรอบต้องอยู่ระหว่าง 1 ถึง 10' })
+      }
+      if (!TIME_LIMITS.includes(timeLimit)) {
+        return acknowledge?.({ ok: false, error: 'เวลาต่อรอบไม่ถูกต้อง' })
       }
       if (scopeId && !provinces.some((feature) => feature.properties.id === scopeId)) {
         return acknowledge?.({ ok: false, error: 'ไม่พบจังหวัดที่เลือก' })
@@ -247,6 +275,9 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
         phase: solo ? 'playing' : 'lobby',
         currentRound: solo ? 1 : 0,
         totalRounds: rounds,
+        timeLimit,
+        roundEndsAt: null,
+        timer: null,
         scopeId,
         target: null,
         players: new Map([[playerId, {
