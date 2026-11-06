@@ -71,6 +71,9 @@ test('host and clients complete a multiplayer round without exposing the answer 
   const joined = await sendWithAck(guest, 'room:join', { name: 'Guest', roomCode: created.roomCode })
   assert.equal(joined.ok, true)
   assert.equal(joined.state.players.length, 2)
+  const renamed = waitForState(host, (state) => state.players.some((player) => player.name === 'Guest 2'))
+  assert.equal((await sendWithAck(guest, 'player:rename', '  Guest 2  ')).ok, true)
+  await renamed
   const unauthorizedStart = await sendWithAck(guest, 'game:start')
   assert.equal(unauthorizedStart.ok, false)
 
@@ -78,6 +81,7 @@ test('host and clients complete a multiplayer round without exposing the answer 
   const guestPlaying = waitForState(guest, (state) => state.phase === 'playing')
   assert.equal((await sendWithAck(host, 'game:start')).ok, true)
   const playingStates = await Promise.all([hostPlaying, guestPlaying])
+  assert.equal((await sendWithAck(guest, 'player:rename', 'Too late')).ok, false)
   assert.ok(playingStates.every((state) => state.target === undefined))
 
   assert.equal((await sendWithAck(host, 'game:guess', null)).ok, false)

@@ -15,6 +15,7 @@ import {
   Map,
   MapPin,
   Medal,
+  Pencil,
   MousePointer2,
   Radio,
   RotateCcw,
@@ -82,6 +83,7 @@ type ClientEvents = {
   'game:guess': (point: Point, ack: (response: Ack) => void) => void
   'game:next': (ack: (response: Ack) => void) => void
   'room:leave': () => void
+  'player:rename': (name: string, ack: (response: Ack) => void) => void
 }
 
 // ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
@@ -213,6 +215,8 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState<'' | 'code' | 'link'>('')
+  // null = ไม่ได้แก้ชื่ออยู่
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [mapExpanded, setMapExpanded] = useState(false)
 
   useEffect(() => {
@@ -456,12 +460,28 @@ function App() {
   }
 
   const leaveGame = () => {
+    setNameDraft(null)
     socket.emit('room:leave')
     setRoom(null)
     setPlayerId('')
     setGuess(null)
     setMapExpanded(false)
     setError('')
+  }
+
+  const saveName = async () => {
+    if (nameDraft === null) return
+    setBusy(true)
+    setError('')
+    try {
+      await emitWithAck((ack) => socket.emit('player:rename', nameDraft, ack))
+      setPlayerName(nameDraft.trim())
+      setNameDraft(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'เปลี่ยนชื่อไม่สำเร็จ')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const copyInvite = async (kind: 'code' | 'link') => {
@@ -527,7 +547,15 @@ function App() {
             {room.players.map((player, index) => (
               <div className="lobby-player" key={player.id}>
                 <span className={`avatar avatar-${index % 4}`}>{player.name.slice(0, 1)}</span>
-                <span>{player.name}{player.id === playerId && <small className="you-label">คุณ</small>}</span>
+                {player.id === playerId && nameDraft !== null ? (
+                  <form className="rename-form" onSubmit={(event) => { event.preventDefault(); void saveName() }}>
+                    <input className="text-input" value={nameDraft} maxLength={18} autoFocus aria-label="ชื่อที่ใช้ในเกม" placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์น้ำ" onChange={(event) => setNameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setNameDraft(null) }} />
+                    <button type="submit" className="icon-button" disabled={busy} aria-label="บันทึกชื่อ"><Check size={15} /></button>
+                    <button type="button" className="icon-button" onClick={() => setNameDraft(null)} aria-label="ยกเลิกการแก้ชื่อ"><X size={15} /></button>
+                  </form>
+                ) : (
+                  <span>{player.name}{player.id === playerId && <><small className="you-label">คุณ</small><button className="icon-button rename-button" onClick={() => setNameDraft(player.name)} aria-label="แก้ไขชื่อ" title="แก้ไขชื่อ"><Pencil size={13} /></button></>}</span>
+                )}
                 {player.id === room.hostId && <small className="host-label">HOST</small>}
               </div>
             ))}

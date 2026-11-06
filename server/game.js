@@ -494,6 +494,17 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
       publish(room)
     })
 
+    socket.on('player:rename', (payload, acknowledge) => {
+      const room = rooms.get(socket.data.roomCode)
+      const player = room?.players.get(socket.data.playerId)
+      if (!room || !player) return acknowledge?.({ ok: false, error: 'ไม่พบห้องของคุณ' })
+      if (room.phase !== 'lobby') return acknowledge?.({ ok: false, error: 'เปลี่ยนชื่อได้เฉพาะตอนรอเริ่มเกม' })
+      const name = typeof payload === 'string' ? payload.trim().slice(0, 18) : ''
+      player.name = pickPlayerName(name, room)
+      acknowledge?.({ ok: true })
+      publish(room)
+    })
+
     socket.on('game:start', (acknowledge) => {
       const room = rooms.get(socket.data.roomCode)
       if (!room || room.hostId !== socket.data.playerId) {
