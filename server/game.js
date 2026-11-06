@@ -128,6 +128,19 @@ export function distanceInKm(first, second) {
   return 6371 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc))
 }
 
+// ระยะที่ทำให้คะแนนลดเหลือ ~37% = 1/10 ของเส้นทแยงขอบเขต (ทั่วประเทศ ~190 กม., จังหวัดเล็ก ๆ ไม่กี่กิโลเมตร)
+export function scoreScaleFor(features) {
+  const bounds = boundsFor(features.flatMap((feature) => polygonsFor(feature).flatMap((polygon) => polygon[0])))
+  const diagonal = distanceInKm({ lat: bounds.minLat, lng: bounds.minLng }, { lat: bounds.maxLat, lng: bounds.maxLng })
+  return Math.max(0.5, diagonal / 10)
+}
+
+// ปักห่างไม่เกิน 25 ม. ได้เต็ม 5,000
+export function scoreForDistance(distanceKm, scaleKm) {
+  if (distanceKm <= 0.025) return 5000
+  return Math.round(5000 * Math.exp(-distanceKm / scaleKm))
+}
+
 function findAddressPart(address, prefixes) {
   const values = Object.values(address)
   for (const prefix of prefixes) {
@@ -194,6 +207,7 @@ function makePublicState(room) {
     currentRound: room.currentRound,
     totalRounds: room.totalRounds,
     timeLimit: room.timeLimit,
+    scoreScaleKm: room.scoreScaleKm,
     roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
     nextRoundAt: room.phase === 'reveal' ? room.nextRoundAt : null,
     serverNow: Date.now(),
@@ -297,7 +311,7 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
     for (const player of room.players.values()) {
       if (!player.guess) continue
       player.distanceKm = distanceInKm(player.guess, room.target)
-      player.roundPoints = Math.round(5000 * Math.exp(-player.distanceKm / 200))
+      player.roundPoints = scoreForDistance(player.distanceKm, room.scoreScaleKm)
       player.score += player.roundPoints
     }
     room.phase = 'reveal'
@@ -423,6 +437,10 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
         scopeId,
         district,
         subdistrict,
+        scoreScaleKm: scoreScaleFor(subdistrict ? [subdistrict]
+          : district ? [district]
+            : scopeId ? provinces.filter((feature) => feature.properties.id === scopeId)
+              : provinces),
         target: null,
         players: new Map([[playerId, {
           id: playerId,

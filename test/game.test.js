@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { Server } from 'socket.io'
 import { io as createClient } from 'socket.io-client'
-import { AQUATIC_NAMES, distanceInKm, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
+import { AQUATIC_NAMES, distanceInKm, scoreForDistance, scoreScaleFor, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
 
 const provinces = JSON.parse(readFileSync(new URL('../public/data/provinces.geojson', import.meta.url))).features
 const districts = JSON.parse(readFileSync(new URL('../public/data/districts.geojson', import.meta.url))).features
@@ -19,6 +19,19 @@ test('province boundaries cover all 77 provinces and sampled points stay in scop
     assert.equal(point.provinceId, province.properties.id)
     assert.ok(pointInProvince(point, province), `sample fell outside ${province.properties.name_th}`)
   }
+})
+
+test('scores scale with the size of the room scope', () => {
+  const countryScale = scoreScaleFor(provinces)
+  const bangkokScale = scoreScaleFor(provinces.filter((feature) => feature.properties.id === 'bangkok-metropolis'))
+  assert.ok(countryScale > 150 && countryScale < 250)
+  assert.ok(bangkokScale < countryScale / 10)
+  assert.ok(scoreScaleFor([subdistricts[0]]) >= 0.5)
+  assert.equal(scoreForDistance(0.02, bangkokScale), 5000)
+  assert.ok(scoreForDistance(0.1, bangkokScale) < 5000)
+  // ห่าง 10 กม. ทั่วประเทศยังได้คะแนนสูง แต่ในกรุงเทพฯ ได้น้อยลงมาก
+  assert.ok(scoreForDistance(10, countryScale) > 4500)
+  assert.ok(scoreForDistance(10, bangkokScale) < 2500)
 })
 
 test('distance calculations and province validation are well defined', () => {
@@ -71,11 +84,13 @@ test('host and clients complete a multiplayer round without exposing the answer 
   const hostReveal = waitForState(host, (state) => state.phase === 'reveal' && state.target?.address)
   const guestReveal = waitForState(guest, (state) => state.phase === 'reveal' && state.target?.address)
   const guestSeesHostGuess = waitForState(guest, (state) => state.players.some((player) => player.hasGuessed))
-  assert.equal((await sendWithAck(host, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, true)
+  // ขอบเขตคือจังหวัดแรก (กระบี่) ปักในจังหวัดเพื่อให้ได้คะแนน
+  assert.equal(provinces[0].properties.id, 'krabi')
+  assert.equal((await sendWithAck(host, 'game:guess', { lat: 8.1, lng: 98.9 })).ok, true)
   const midRound = await guestSeesHostGuess
   assert.equal(midRound.phase, 'playing')
   assert.ok(midRound.players.every((player) => player.score === 0 && player.roundPoints === 0))
-  assert.equal((await sendWithAck(guest, 'game:guess', { lat: 14.25, lng: 100.5 })).ok, true)
+  assert.equal((await sendWithAck(guest, 'game:guess', { lat: 8.0, lng: 99.0 })).ok, true)
   const revealed = await Promise.all([hostReveal, guestReveal])
   assert.ok(revealed.every((state) => state.target && state.guesses.length === 2))
   assert.ok(revealed.every((state) => state.target.address.subdistrict === 'ตำบลทดสอบ' && state.target.address.district === 'อำเภอทดสอบ'))
