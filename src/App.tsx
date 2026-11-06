@@ -202,7 +202,7 @@ function App() {
   const [playerId, setPlayerId] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [rounds, setRounds] = useState(5)
-  const [timeLimit, setTimeLimit] = useState(60)
+  const [timeLimit, setTimeLimit] = useState(90)
   const [now, setNow] = useState(() => Date.now())
   // ส่วนต่างนาฬิกา server กับเครื่องนี้ เพื่อให้นับถอยหลังตรงกันทุกเครื่อง
   const [clockOffset, setClockOffset] = useState(0)
