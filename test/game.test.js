@@ -122,7 +122,7 @@ test('district-scoped rooms validate the district and reveal its name', async (c
   assert.deepEqual(state.target.address, { subdistrict: 'ตำบลทดสอบ', district: districtLabel(district) })
 })
 
-test('timed rounds reveal automatically when time runs out', async (context) => {
+test('timed rounds reveal automatically and advance after the reveal pause', async (context) => {
   const httpServer = createServer()
   const ioServer = new Server(httpServer)
   registerGameHandlers(ioServer, provinces, {
@@ -141,15 +141,22 @@ test('timed rounds reveal automatically when time runs out', async (context) => 
   assert.equal(invalid.ok, false)
 
   const revealed = waitForState(client, (state) => state.phase === 'reveal')
-  const created = await sendWithAck(client, 'room:create', { name: 'Solo', rounds: 1, timeLimit: 30, provinceId: null, solo: true })
+  const created = await sendWithAck(client, 'room:create', { name: 'Solo', rounds: 2, timeLimit: 30, provinceId: null, solo: true })
   assert.equal(created.ok, true)
   assert.equal(created.state.timeLimit, 30)
   assert.ok(created.state.roundEndsAt > created.state.serverNow)
   const state = await revealed
   assert.equal(state.roundEndsAt, null)
+  assert.ok(state.nextRoundAt > state.serverNow)
   assert.equal(state.guesses.length, 0)
   assert.equal(state.players[0].roundPoints, 0)
+  const secondRound = waitForState(client, (next) => next.phase === 'playing' && next.currentRound === 2)
   assert.equal((await sendWithAck(client, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, false)
+  assert.equal((await secondRound).nextRoundAt, null)
+
+  const finished = waitForState(client, (next) => next.phase === 'finished')
+  assert.equal((await sendWithAck(client, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, true)
+  assert.equal((await finished).currentRound, 2)
 })
 
 function waitForEvent(socket, eventName) {

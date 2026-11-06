@@ -57,6 +57,7 @@ type RoomState = {
   totalRounds: number
   timeLimit: number
   roundEndsAt: number | null
+  nextRoundAt: number | null
   serverNow: number
   scopeId: string | null
   districtId: string | null
@@ -162,7 +163,9 @@ function App() {
   const [districtError, setDistrictError] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [showJoin, setShowJoin] = useState(false)
-  const [guess, setGuess] = useState<Point | null>(null)
+  // ผูกหมุดไว้กับรอบ เพื่อให้หมุดเก่าหายเองเมื่อขึ้นรอบใหม่
+  const [guessDraft, setGuessDraft] = useState<{ roundKey: string; point: Point } | null>(null)
+  const [scoresHidden, setScoresHidden] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -250,16 +253,19 @@ function App() {
   const myResult = room?.guesses.find((result) => result.playerId === playerId)
   const isHost = room?.hostId === playerId
   const canGuess = room?.phase === 'playing' && !myPlayer?.hasGuessed
-  const roundEndsAt = room?.phase === 'playing' ? room.roundEndsAt : null
-  const remainingMs = roundEndsAt ? Math.max(0, roundEndsAt - (now + clockOffset)) : null
+  // เวลาหมดรอบตอนเล่น หรือเวลาขึ้นรอบถัดไปตอนเฉลย
+  const deadline = room?.phase === 'playing' ? room.roundEndsAt : room?.phase === 'reveal' ? room.nextRoundAt : null
+  const remainingMs = deadline ? Math.max(0, deadline - (now + clockOffset)) : null
 
   useEffect(() => {
-    if (!roundEndsAt) return
+    if (!deadline) return
     const interval = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(interval)
-  }, [roundEndsAt])
+  }, [deadline])
   const canCreate = connected && Boolean(provinces) && !busy
   const currentRoundKey = room ? `${room.roomCode}-${room.currentRound}` : ''
+  const guess = guessDraft?.roundKey === currentRoundKey ? guessDraft.point : null
+  const setGuess = (point: Point | null) => setGuessDraft(point && { roundKey: currentRoundKey, point })
   const currentViewControl = viewControl.roundKey === currentRoundKey
     ? viewControl
     : { roundKey: currentRoundKey, turn: 0, fov: 90 }
@@ -465,6 +471,11 @@ function App() {
     const reveal = room.phase === 'reveal' || room.phase === 'finished'
     const target = room.target
     const rankedPlayers = [...room.players].sort((a, b) => b.score - a.score)
+    const phaseKey = `${currentRoundKey}-${room.phase}`
+    const scoresOpen = reveal && scoresHidden !== phaseKey
+    const lastRound = room.currentRound >= room.totalRounds
+    const nextLabel = lastRound ? 'ดูผลสุดท้าย' : 'รอบถัดไป'
+    const secondsLeft = Math.ceil((remainingMs ?? 0) / 1000)
     return (
       <main className="game-screen">
         <div className="street-view-frame">
@@ -503,7 +514,7 @@ function App() {
           <button className="back-button" onClick={leaveGame} aria-label="ออกจากเกม"><ArrowLeft size={18} /></button>
           <div className="game-brand"><span className="brand-mark"><Compass size={17} /></span> แผนที่ลับ</div>
           <span className="room-pill"><Users size={14} /> {room.roomCode}</span>
-          {remainingMs !== null && <span className={`timer-pill ${remainingMs <= 10000 ? 'urgent' : ''}`} role="timer" aria-label="เวลาที่เหลือ"><Timer size={14} /> {Math.floor(Math.ceil(remainingMs / 1000) / 60)}:{String(Math.ceil(remainingMs / 1000) % 60).padStart(2, '0')}</span>}
+          {room.phase === 'playing' && remainingMs !== null && <span className={`timer-pill ${remainingMs <= 10000 ? 'urgent' : ''}`} role="timer" aria-label="เวลาที่เหลือ"><Timer size={14} /> {Math.floor(Math.ceil(remainingMs / 1000) / 60)}:{String(Math.ceil(remainingMs / 1000) % 60).padStart(2, '0')}</span>}
           <span className={`live-pill ${connected ? 'online' : ''}`}><i /> {connected ? 'เชื่อมต่อแล้ว' : 'ขาดการเชื่อมต่อ'}</span>
         </header>
         <section className="round-card">
@@ -574,15 +585,51 @@ function App() {
           ) : reveal ? (
             <>
               <div className="result-summary"><small>{room.phase === 'finished' ? 'คะแนนสุดท้ายของคุณ' : 'คำตอบของคุณ'}</small><b>{myResult ? `${myResult.points.toLocaleString()} คะแนน` : '—'}</b><span>{myResult ? `ห่างจากจุดหมาย ${myResult.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.` : 'ไม่มีคำตอบในรอบนี้'}</span></div>
+              {!scoresOpen && <button className="secondary-button scores-button" onClick={() => setScoresHidden('')}><Medal size={15} /> ตารางคะแนน</button>}
               {room.phase === 'finished'
                 ? <button className="primary-button next-button" onClick={leaveGame}>กลับหน้าหลัก <ArrowRight size={16} /></button>
                 : isHost
-                  ? <button className="primary-button next-button" disabled={busy} onClick={nextRound}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowRight size={16} />} รอบถัดไป</button>
-                  : <span className="waiting-message"><LoaderCircle className="spin" size={15} /> รอเจ้าของห้องไปต่อ</span>}
+                  ? <button className="primary-button next-button" disabled={busy} onClick={nextRound}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowRight size={16} />} {nextLabel}</button>
+                  : <span className="waiting-message"><LoaderCircle className="spin" size={15} /> {nextLabel}ใน {secondsLeft} วิ</span>}
             </>
           ) : null}
           {error && <p className="error-text">{error}</p>}
         </section>
+        {scoresOpen && (
+          <div className="score-modal-backdrop">
+            <section className="score-modal" role="dialog" aria-modal="true" aria-labelledby="score-modal-title" onKeyDown={(event) => { if (event.key === 'Escape') setScoresHidden(phaseKey) }}>
+              <header className="score-modal-header">
+                <small>{room.phase === 'finished' ? `จบครบ ${room.totalRounds} รอบ` : `รอบที่ ${room.currentRound} / ${room.totalRounds}`}</small>
+                <h2 id="score-modal-title">{room.phase === 'finished' ? 'สรุปคะแนนสุดท้าย' : 'ผลคะแนนรอบนี้'}</h2>
+                {target && <p><MapPin size={14} /> {formatTargetLocation(target)}</p>}
+                <button className="score-modal-close" onClick={() => setScoresHidden(phaseKey)} aria-label="ปิดตารางคะแนนเพื่อดูแผนที่"><X size={16} /></button>
+              </header>
+              <ol className="score-table">
+                {rankedPlayers.map((player, index) => {
+                  const result = room.guesses.find((guessResult) => guessResult.playerId === player.id)
+                  return (
+                    <li className={`score-table-row ${player.id === playerId ? 'current-player' : ''}`} key={player.id}>
+                      <span className={`rank rank-${index + 1}`}>{index + 1}</span>
+                      <span className={`avatar avatar-${index % 4}`}>{player.name.slice(0, 1)}</span>
+                      <span className="score-table-name">{player.name}{player.id === playerId && <small>คุณ</small>}</span>
+                      {room.phase !== 'finished' && <span className="score-table-round">{result ? <><b>+{result.points.toLocaleString()}</b><small>{result.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.</small></> : <small>ไม่ได้ตอบ</small>}</span>}
+                      <b className="score-table-total">{player.score.toLocaleString()}</b>
+                    </li>
+                  )
+                })}
+              </ol>
+              <footer className="score-modal-footer">
+                {room.phase === 'reveal' && <div className="next-countdown" role="timer"><span>{nextLabel}ใน {secondsLeft} วินาที</span><i style={{ width: `${Math.min(100, ((remainingMs ?? 0) / 15000) * 100)}%` }} /></div>}
+                <div className="score-modal-actions">
+                  <button className="secondary-button" onClick={() => setScoresHidden(phaseKey)}><Map size={15} /> ดูแผนที่</button>
+                  {room.phase === 'finished'
+                    ? <button className="primary-button" autoFocus onClick={leaveGame}>กลับหน้าหลัก <ArrowRight size={16} /></button>
+                    : isHost && <button className="primary-button" autoFocus disabled={busy} onClick={nextRound}>{busy ? <LoaderCircle className="spin" size={16} /> : <ArrowRight size={16} />} {nextLabel}เลย</button>}
+                </div>
+              </footer>
+            </section>
+          </div>
+        )}
       </main>
     )
   }

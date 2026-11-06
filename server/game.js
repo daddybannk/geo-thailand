@@ -3,6 +3,8 @@ import { randomInt, randomUUID } from 'node:crypto'
 const MAX_PLAYERS = 8
 // 0 = ไม่จับเวลา
 export const TIME_LIMITS = [0, 30, 60, 90, 120]
+// เวลาดูเฉลยก่อนไปรอบถัดไปอัตโนมัติ
+export const REVEAL_SECONDS = 15
 const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 function polygonsFor(feature) {
@@ -171,6 +173,7 @@ function makePublicState(room) {
     totalRounds: room.totalRounds,
     timeLimit: room.timeLimit,
     roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
+    nextRoundAt: room.phase === 'reveal' ? room.nextRoundAt : null,
     serverNow: Date.now(),
     scopeId: room.scopeId,
     districtId: room.district?.properties.id ?? null,
@@ -216,6 +219,28 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
     clearTimeout(room.timer)
     room.timer = null
     room.roundEndsAt = null
+    room.nextRoundAt = null
+  }
+
+  function advance(room) {
+    if (room.currentRound >= room.totalRounds) {
+      stopTimer(room)
+      room.phase = 'finished'
+    } else {
+      room.currentRound += 1
+      startRound(room)
+    }
+  }
+
+  function reveal(room) {
+    room.phase = 'reveal'
+    stopTimer(room)
+    room.nextRoundAt = Date.now() + REVEAL_SECONDS * msPerSecond
+    room.timer = setTimeout(() => {
+      if (room.phase !== 'reveal') return
+      advance(room)
+      publish(room)
+    }, REVEAL_SECONDS * msPerSecond)
   }
 
   function startRound(room) {
@@ -225,8 +250,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       room.roundEndsAt = Date.now() + room.timeLimit * msPerSecond
       room.timer = setTimeout(() => {
         if (room.phase !== 'playing') return
-        room.phase = 'reveal'
-        stopTimer(room)
+        reveal(room)
         publish(room)
       }, room.timeLimit * msPerSecond)
     }
@@ -258,8 +282,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
 
   function revealIfEveryoneGuessed(room) {
     if (room.players.size && [...room.players.values()].every((player) => player.guess)) {
-      room.phase = 'reveal'
-      stopTimer(room)
+      reveal(room)
     }
   }
 
@@ -318,6 +341,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
         totalRounds: rounds,
         timeLimit,
         roundEndsAt: null,
+        nextRoundAt: null,
         timer: null,
         scopeId,
         district,
@@ -415,12 +439,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       if (room.phase !== 'reveal') {
         return acknowledge?.({ ok: false, error: 'รอให้ทุกคนตอบก่อน' })
       }
-      if (room.currentRound >= room.totalRounds) {
-        room.phase = 'finished'
-      } else {
-        room.currentRound += 1
-        startRound(room)
-      }
+      advance(room)
       acknowledge?.({ ok: true })
       publish(room)
     })
