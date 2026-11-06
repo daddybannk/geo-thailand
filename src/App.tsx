@@ -70,7 +70,9 @@ type ClientEvents = {
   'room:leave': () => void
 }
 
-const socket: Socket<ServerEvents, ClientEvents> = io({ autoConnect: true })
+// ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
+const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
+const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
 const guessIcon = L.divIcon({
   className: 'marker-wrapper',
   html: '<span class="game-marker guess-marker"><i></i></span>',
@@ -173,7 +175,7 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/config', { signal: controller.signal })
+    fetch(`${serverUrl}/api/config`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error('ตรวจสอบการตั้งค่า Google Maps ไม่สำเร็จ')
         return response.json() as Promise<{ googleMapsConfigured: boolean; cartoTileUrl?: string }>
@@ -399,7 +401,7 @@ function App() {
           {googleMapsConfigured ? (
             <iframe
               key={`${currentRoundKey}-${currentViewControl.turn}-${currentViewControl.fov}`}
-              src={`/api/round-view/${encodeURIComponent(room.roomCode)}?round=${room.currentRound}&turn=${currentViewControl.turn}&fov=${currentViewControl.fov}`}
+              src={`${serverUrl}/api/round-view/${encodeURIComponent(room.roomCode)}?round=${room.currentRound}&turn=${currentViewControl.turn}&fov=${currentViewControl.fov}`}
               title="Google Maps Street View"
               allowFullScreen
               referrerPolicy="strict-origin-when-cross-origin"
@@ -410,7 +412,7 @@ function App() {
               <h2>{googleMapsConfigured === null ? 'กำลังเตรียมภาพ Street View' : 'ยังไม่ได้ตั้งค่า Google Maps'}</h2>
               <p>{googleConfigError || 'เพิ่ม Google Maps Embed API key ในไฟล์ .env.local เพื่อแสดงภาพรอบเกม'}</p>
               {googleMapsConfigured === false && <>
-                <a href={`/api/round-link/${encodeURIComponent(room.roomCode)}`} target="_blank" rel="noreferrer">เปิดภาพใน Google Maps แท็บใหม่ <ArrowRight size={15} /></a>
+                <a href={`${serverUrl}/api/round-link/${encodeURIComponent(room.roomCode)}`} target="_blank" rel="noreferrer">เปิดภาพใน Google Maps แท็บใหม่ <ArrowRight size={15} /></a>
                 <a href="https://developers.google.com/maps/documentation/embed/get-api-key" target="_blank" rel="noreferrer">วิธีตั้งค่า API key</a>
               </>}
             </div>

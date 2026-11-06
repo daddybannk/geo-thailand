@@ -11,10 +11,23 @@ const provincesPath = resolve(root, 'public/data/provinces.geojson')
 const provinces = JSON.parse(readFileSync(provincesPath, 'utf8')).features
 const app = express()
 const httpServer = createServer(app)
-const io = new Server(httpServer)
+// รายชื่อ origin ของ frontend ที่แยก deploy (คั่นด้วย comma) เช่น https://geo-thailand.vercel.app
+const clientOrigins = (process.env.CLIENT_ORIGIN ?? '').split(',').map((origin) => origin.trim()).filter(Boolean)
+const io = new Server(httpServer, clientOrigins.length ? { cors: { origin: clientOrigins } } : {})
 const distPath = resolve(root, 'dist')
 const googleMapsKey = process.env.GOOGLE_MAPS_EMBED_API_KEY
 const cartoBasemapKey = process.env.CARTO_BASEMAP_KEY
+
+if (clientOrigins.length) {
+  app.use('/api', (request, response, next) => {
+    const origin = request.headers.origin
+    if (origin && clientOrigins.includes(origin)) {
+      response.setHeader('Access-Control-Allow-Origin', origin)
+      response.setHeader('Vary', 'Origin')
+    }
+    next()
+  })
+}
 
 app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' })

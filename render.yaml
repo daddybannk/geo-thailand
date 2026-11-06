@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: geo-thailand
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: GOOGLE_MAPS_EMBED_API_KEY
+        sync: false
+      - key: CARTO_BASEMAP_KEY
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false
