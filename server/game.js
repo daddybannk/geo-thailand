@@ -4,7 +4,7 @@ const MAX_PLAYERS = 8
 // 0 = ไม่จับเวลา
 export const TIME_LIMITS = [0, 30, 60, 90, 120]
 // เวลาดูเฉลยก่อนไปรอบถัดไปอัตโนมัติ
-export const REVEAL_SECONDS = 15
+export const REVEAL_SECONDS = 30
 // ชื่อสุ่มเมื่อผู้เล่นไม่ได้ตั้งชื่อ
 export const AQUATIC_NAMES = [
   'ปลาทู', 'ปลาบึก', 'ปลากัด', 'ปลานิล', 'ปลาหมึก', 'ปลาการ์ตูน', 'ปลาโลมา', 'ปลาวาฬ', 'ปลาฉลาม', 'ปลากระเบน',
@@ -208,6 +208,7 @@ function makePublicState(room) {
     totalRounds: room.totalRounds,
     timeLimit: room.timeLimit,
     scoreScaleKm: room.scoreScaleKm,
+    revealSeconds: REVEAL_SECONDS,
     roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
     nextRoundAt: room.phase === 'reveal' ? room.nextRoundAt : null,
     serverNow: Date.now(),

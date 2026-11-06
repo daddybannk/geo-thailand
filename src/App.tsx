@@ -62,6 +62,7 @@ type RoomState = {
   totalRounds: number
   timeLimit: number
   scoreScaleKm: number
+  revealSeconds: number
   roundEndsAt: number | null
   nextRoundAt: number | null
   serverNow: number
@@ -743,7 +744,7 @@ function App() {
                 })}
               </ol>
               <footer className="score-modal-footer">
-                {room.phase === 'reveal' && <div className="next-countdown" role="timer"><span>{nextLabel}ใน {secondsLeft} วินาที</span><i style={{ width: `${Math.min(100, ((remainingMs ?? 0) / 15000) * 100)}%` }} /></div>}
+                {room.phase === 'reveal' && <div className="next-countdown" role="timer"><span>{nextLabel}ใน {secondsLeft} วินาที</span><i style={{ width: `${Math.min(100, ((remainingMs ?? 0) / (room.revealSeconds * 1000)) * 100)}%` }} /></div>}
                 <div className="score-modal-actions">
                   <button className="secondary-button" onClick={() => setScoresHidden(phaseKey)}><Map size={15} /> ดูแผนที่</button>
                   {room.phase === 'finished'
