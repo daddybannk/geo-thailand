@@ -41,13 +41,7 @@ export function pointInProvince(point, feature) {
   ))
 }
 
-export function generateLocation(provinces, scopeId = null, random = Math.random) {
-  const eligible = scopeId
-    ? provinces.filter((feature) => feature.properties.id === scopeId)
-    : provinces
-  if (!eligible.length) throw new Error('ไม่พบจังหวัดที่เลือก')
-
-  const feature = eligible[Math.floor(random() * eligible.length)]
+function samplePoint(feature, random) {
   const components = polygonsFor(feature).map((polygon) => {
     const bounds = boundsFor(polygon[0])
     return { polygon, bounds, weight: Math.max(0.000001, (bounds.maxLng - bounds.minLng) * (bounds.maxLat - bounds.minLat)) }
@@ -69,17 +63,46 @@ export function generateLocation(provinces, scopeId = null, random = Math.random
       lng: component.bounds.minLng + random() * (component.bounds.maxLng - component.bounds.minLng),
       lat: component.bounds.minLat + random() * (component.bounds.maxLat - component.bounds.minLat),
     }
-    if (pointInProvince(point, feature)) {
-      return {
-        ...point,
-        provinceId: feature.properties.id,
-        provinceName: feature.properties.name_th,
-        region: feature.properties.region,
-      }
+    if (pointInProvince(point, feature)) return point
+  }
+  return null
+}
+
+export function generateLocation(provinces, scopeId = null, random = Math.random) {
+  const eligible = scopeId
+    ? provinces.filter((feature) => feature.properties.id === scopeId)
+    : provinces
+  if (!eligible.length) throw new Error('ไม่พบจังหวัดที่เลือก')
+
+  const feature = eligible[Math.floor(random() * eligible.length)]
+  const point = samplePoint(feature, random)
+  if (point) {
+    return {
+      ...point,
+      provinceId: feature.properties.id,
+      provinceName: feature.properties.name_th,
+      region: feature.properties.region,
     }
   }
 
   throw new Error(`สุ่มตำแหน่งในจังหวัด${feature.properties.name_th}ไม่สำเร็จ`)
+}
+
+export function generateDistrictLocation(district, provinces, random = Math.random) {
+  const province = provinces.find((feature) => feature.properties.id === district.properties.provinceId)
+  const point = samplePoint(district, random)
+  if (!province || !point) throw new Error(`สุ่มตำแหน่งในอำเภอ${district.properties.name_th}ไม่สำเร็จ`)
+  return {
+    ...point,
+    provinceId: province.properties.id,
+    provinceName: province.properties.name_th,
+    region: province.properties.region,
+  }
+}
+
+export function districtLabel(district) {
+  const prefix = district.properties.provinceId === 'bangkok-metropolis' ? 'เขต' : 'อำเภอ'
+  return `${prefix}${district.properties.name_th}`
 }
 
 export function distanceInKm(first, second) {
@@ -131,6 +154,12 @@ function makeRoomCode(rooms) {
   return code
 }
 
+function scopeNameFor(room) {
+  if (!room.scopeId) return 'สุ่มทั่วประเทศไทย'
+  const provinceName = room.provinces.find((feature) => feature.properties.id === room.scopeId).properties.name_th
+  return room.district ? `${districtLabel(room.district)} · ${provinceName}` : provinceName
+}
+
 function makePublicState(room) {
   const reveal = room.phase === 'reveal' || room.phase === 'finished'
   return {
@@ -144,9 +173,8 @@ function makePublicState(room) {
     roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
     serverNow: Date.now(),
     scopeId: room.scopeId,
-    scopeName: room.scopeId
-      ? room.provinces.find((feature) => feature.properties.id === room.scopeId).properties.name_th
-      : 'สุ่มทั่วประเทศไทย',
+    districtId: room.district?.properties.id ?? null,
+    scopeName: scopeNameFor(room),
     players: [...room.players.values()].map(({ id, name, score, guess, roundPoints }) => ({
       id,
       name,
@@ -177,7 +205,7 @@ function makePublicState(room) {
 }
 
 // msPerSecond ใช้ย่นเวลาในชุดทดสอบ
-export function registerGameHandlers(io, provinces, { findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
+export function registerGameHandlers(io, provinces, { districts = [], findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
   const rooms = new Map()
 
   function publish(room) {
@@ -202,15 +230,23 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
         publish(room)
       }, room.timeLimit * msPerSecond)
     }
-    room.target = generateLocation(provinces, room.scopeId)
+    room.target = room.district
+      ? generateDistrictLocation(room.district, provinces)
+      : generateLocation(provinces, room.scopeId)
     room.heading = randomInt(360)
     const target = room.target
     // undefined = กำลังค้นหา, null = ค้นหาไม่สำเร็จ
     target.address = undefined
+    // อำเภอหาจากขอบเขตในเครื่องซึ่งแม่นกว่า Nominatim
+    const district = room.district ?? districts.find((feature) => (
+      feature.properties.provinceId === target.provinceId && pointInProvince(target, feature)
+    ))
     findAddress(target)
       .catch(() => null)
-      .then((address) => {
-        target.address = address
+      .then((found) => {
+        target.address = found || district
+          ? { subdistrict: found?.subdistrict ?? null, district: district ? districtLabel(district) : found?.district ?? null }
+          : null
         if (room.target === target && (room.phase === 'reveal' || room.phase === 'finished')) publish(room)
       })
     for (const player of room.players.values()) {
@@ -254,6 +290,8 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
       const name = typeof config.name === 'string' ? config.name.trim().slice(0, 18) : ''
       const rounds = Number(config.rounds)
       const scopeId = typeof config.provinceId === 'string' ? config.provinceId : null
+      const districtId = typeof config.districtId === 'string' ? config.districtId : null
+      const district = districtId ? districts.find((feature) => feature.properties.id === districtId) : null
       const solo = config.solo === true
       const timeLimit = config.timeLimit === undefined ? 0 : Number(config.timeLimit)
       if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) {
@@ -264,6 +302,9 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
       }
       if (scopeId && !provinces.some((feature) => feature.properties.id === scopeId)) {
         return acknowledge?.({ ok: false, error: 'ไม่พบจังหวัดที่เลือก' })
+      }
+      if (districtId && (!district || district.properties.provinceId !== scopeId)) {
+        return acknowledge?.({ ok: false, error: 'ไม่พบอำเภอที่เลือกในจังหวัดนี้' })
       }
 
       const code = makeRoomCode(rooms)
@@ -279,6 +320,7 @@ export function registerGameHandlers(io, provinces, { findAddress = lookupAddres
         roundEndsAt: null,
         timer: null,
         scopeId,
+        district,
         target: null,
         players: new Map([[playerId, {
           id: playerId,

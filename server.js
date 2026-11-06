@@ -9,6 +9,7 @@ import { registerGameHandlers } from './server/game.js'
 const root = dirname(fileURLToPath(import.meta.url))
 const provincesPath = resolve(root, 'public/data/provinces.geojson')
 const provinces = JSON.parse(readFileSync(provincesPath, 'utf8')).features
+const districts = JSON.parse(readFileSync(resolve(root, 'public/data/districts.geojson'), 'utf8')).features
 const app = express()
 const httpServer = createServer(app)
 // รายชื่อ origin ของ frontend ที่แยก deploy (คั่นด้วย comma) เช่น https://geo-thailand.vercel.app
@@ -43,7 +44,7 @@ app.get('/api/config', (_request, response) => {
   })
 })
 
-const getRoundView = registerGameHandlers(io, provinces)
+const getRoundView = registerGameHandlers(io, provinces, { districts })
 
 app.get('/api/round-view/:roomCode', (request, response) => {
   const view = getRoundView(request.params.roomCode)

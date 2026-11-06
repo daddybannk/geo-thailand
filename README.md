@@ -20,7 +20,7 @@ npm run dev
 
 ## วิธีเล่น
 
-1. เลือกจำนวนรอบตั้งแต่ 1–10 รอบ และเลือกจังหวัดหรือสุ่มทั่วประเทศไทย
+1. เลือกจำนวนรอบตั้งแต่ 1–10 รอบ เวลาต่อรอบ และขอบเขตเป็นทั่วประเทศไทย จังหวัด หรืออำเภอ
 2. เลือกเล่นคนเดียวหรือสร้างห้อง แล้วส่งรหัส 6 ตัวให้เพื่อน
 3. ผู้เล่นปักหมุดบนแผนที่พร้อมกัน คะแนนคำนวณจากระยะห่างของคำตอบ
 
@@ -34,4 +34,4 @@ npm run dev
 
 Google Maps Embed API ไม่มีค่าใช้จ่ายต่อการฝังแผนที่ตาม [ราคาและเงื่อนไขของ Google](https://developers.google.com/maps/documentation/embed/usage-and-billing) แต่ต้องมี Google Cloud project ที่เปิด Billing และเปิด Maps Embed API ส่วน CARTO basemap key จะถูกส่งไปยัง tile service ในเบราว์เซอร์ ควรจำกัด key ด้วย referrer/domain
 
-ขอบเขตจังหวัดดัดแปลงจาก [geoBoundaries (Thailand ADM1)](https://www.geoboundaries.org/) ภายใต้ Open Database License 1.0 (ODbL). แผนที่สำหรับปักหมุดใช้ OpenStreetMap และ CARTO; ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดภาพแผนที่และ Street View
+ขอบเขตจังหวัดดัดแปลงจาก [geoBoundaries (Thailand ADM1)](https://www.geoboundaries.org/) ภายใต้ Open Database License 1.0 (ODbL). ขอบเขตอำเภอดัดแปลงจาก [OpenGISData-Thailand](https://github.com/chingchai/OpenGISData-Thailand) ภายใต้ [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). แผนที่สำหรับปักหมุดใช้ OpenStreetMap และ CARTO; ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดภาพแผนที่และ Street View

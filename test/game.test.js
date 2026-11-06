@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { Server } from 'socket.io'
 import { io as createClient } from 'socket.io-client'
-import { distanceInKm, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
+import { distanceInKm, districtLabel, generateDistrictLocation, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
 
 const provinces = JSON.parse(readFileSync(new URL('../public/data/provinces.geojson', import.meta.url))).features
+const districts = JSON.parse(readFileSync(new URL('../public/data/districts.geojson', import.meta.url))).features
 
 test('province boundaries cover all 77 provinces and sampled points stay in scope', () => {
   assert.equal(provinces.length, 77)
@@ -77,6 +78,48 @@ test('host and clients complete a multiplayer round without exposing the answer 
   const guestFinished = waitForState(guest, (state) => state.phase === 'finished')
   assert.equal((await sendWithAck(host, 'game:next')).ok, true)
   assert.ok((await Promise.all([hostFinished, guestFinished])).every((state) => state.currentRound === 1))
+})
+
+test('district boundaries belong to a province and sampled points stay in the district', () => {
+  assert.equal(districts.length, 928)
+  for (const district of districts) {
+    const point = generateDistrictLocation(district, provinces)
+    assert.equal(point.provinceId, district.properties.provinceId)
+    assert.ok(pointInProvince(point, district), `sample fell outside ${district.properties.name_th}`)
+  }
+})
+
+test('district-scoped rooms validate the district and reveal its name', async (context) => {
+  const httpServer = createServer()
+  const ioServer = new Server(httpServer)
+  registerGameHandlers(ioServer, provinces, {
+    districts,
+    findAddress: async () => ({ subdistrict: 'ตำบลทดสอบ', district: 'อำเภอจาก Nominatim' }),
+  })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const client = createClient(`http://127.0.0.1:${httpServer.address().port}`, { transports: ['websocket'] })
+  context.after(async () => {
+    client.disconnect()
+    await new Promise((resolve) => ioServer.close(resolve))
+  })
+  await waitForEvent(client, 'connect')
+
+  const district = districts.find((feature) => feature.properties.provinceId === 'chiang-mai')
+  const otherProvince = districts.find((feature) => feature.properties.provinceId !== 'chiang-mai')
+  const config = { name: 'Solo', rounds: 1, timeLimit: 0, provinceId: 'chiang-mai', solo: true }
+  assert.equal((await sendWithAck(client, 'room:create', { ...config, districtId: otherProvince.properties.id })).ok, false)
+  assert.equal((await sendWithAck(client, 'room:create', { ...config, districtId: 'missing' })).ok, false)
+
+  const created = await sendWithAck(client, 'room:create', { ...config, districtId: district.properties.id })
+  assert.equal(created.ok, true)
+  assert.equal(created.state.districtId, district.properties.id)
+  assert.equal(created.state.scopeName, `${districtLabel(district)} · เชียงใหม่`)
+
+  const revealed = waitForState(client, (state) => state.phase === 'reveal' && state.target?.address)
+  assert.equal((await sendWithAck(client, 'game:guess', { lat: 18.79, lng: 98.98 })).ok, true)
+  const state = await revealed
+  assert.equal(state.target.provinceId, 'chiang-mai')
+  assert.deepEqual(state.target.address, { subdistrict: 'ตำบลทดสอบ', district: districtLabel(district) })
 })
 
 test('timed rounds reveal automatically when time runs out', async (context) => {

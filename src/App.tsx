@@ -36,11 +36,13 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import type { FeatureCollection, Geometry } from 'geojson'
+import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import 'leaflet/dist/leaflet.css'
 
 type ProvinceProperties = { id: string; name_en: string; name_th: string; region: string }
 type ProvinceCollection = FeatureCollection<Geometry, ProvinceProperties>
+type DistrictProperties = { id: string; name_th: string; provinceId: string }
+type DistrictCollection = FeatureCollection<Geometry, DistrictProperties>
 type Point = { lat: number; lng: number }
 type Player = { id: string; name: string; score: number; hasGuessed: boolean; roundPoints: number }
 type GuessResult = Point & { playerId: string; name: string; distanceKm: number; points: number }
@@ -57,6 +59,7 @@ type RoomState = {
   roundEndsAt: number | null
   serverNow: number
   scopeId: string | null
+  districtId: string | null
   scopeName: string
   players: Player[]
   target?: Target
@@ -66,7 +69,7 @@ type Ack<T = Record<string, never>> = { ok: boolean; error?: string } & T
 type CreateRoomResult = { roomCode: string; playerId: string; state: RoomState }
 type ServerEvents = { 'room:state': (state: RoomState) => void }
 type ClientEvents = {
-  'room:create': (config: { name: string; rounds: number; timeLimit: number; provinceId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
+  'room:create': (config: { name: string; rounds: number; timeLimit: number; provinceId: string | null; districtId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'room:join': (config: { name: string; roomCode: string }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'game:start': (ack: (response: Ack) => void) => void
   'game:guess': (point: Point, ack: (response: Ack) => void) => void
@@ -78,6 +81,7 @@ type ClientEvents = {
 const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
 const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
 const TIME_LIMIT_OPTIONS = [30, 60, 90, 120, 0]
+const districtLabel = (district: DistrictProperties) => `${district.provinceId === 'bangkok-metropolis' ? 'เขต' : 'อำเภอ'}${district.name_th}`
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
 
 function formatTargetLocation(target: Target) {
@@ -114,7 +118,7 @@ function MapClickHandler({ disabled, onSelect }: { disabled: boolean; onSelect: 
   return null
 }
 
-function FitMapToScope({ feature, resetKey }: { feature?: ProvinceCollection['features'][number]; resetKey: string }) {
+function FitMapToScope({ feature, resetKey }: { feature?: Feature; resetKey: string }) {
   const map = useMap()
   useEffect(() => {
     if (feature) {
@@ -153,6 +157,9 @@ function App() {
   // ส่วนต่างนาฬิกา server กับเครื่องนี้ เพื่อให้นับถอยหลังตรงกันทุกเครื่อง
   const [clockOffset, setClockOffset] = useState(0)
   const [scopeId, setScopeId] = useState('')
+  const [districtId, setDistrictId] = useState('')
+  const [districts, setDistricts] = useState<DistrictCollection | null>(null)
+  const [districtError, setDistrictError] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [showJoin, setShowJoin] = useState(false)
   const [guess, setGuess] = useState<Point | null>(null)
@@ -211,11 +218,34 @@ function App() {
     return () => controller.abort()
   }, [])
 
+  // โหลดขอบเขตอำเภอเมื่อต้องใช้เท่านั้น เพราะไฟล์ใหญ่กว่าจังหวัดหลายเท่า
+  const needDistricts = Boolean(scopeId || room?.districtId)
+  useEffect(() => {
+    if (!needDistricts || districts) return
+    const controller = new AbortController()
+    fetch('/data/districts.geojson', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('โหลดรายชื่ออำเภอไม่สำเร็จ')
+        return response.json() as Promise<DistrictCollection>
+      })
+      .then(setDistricts)
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setDistrictError(cause instanceof Error ? cause.message : 'โหลดรายชื่ออำเภอไม่สำเร็จ')
+      })
+    return () => controller.abort()
+  }, [needDistricts, districts])
+
+  const districtOptions = useMemo(
+    () => (districts?.features ?? []).filter((feature) => feature.properties.provinceId === scopeId),
+    [districts, scopeId],
+  )
   const provinceOptions = useMemo(
     () => [...(provinces?.features ?? [])].sort((a, b) => a.properties.name_th.localeCompare(b.properties.name_th, 'th')),
     [provinces],
   )
-  const selectedFeature = provinces?.features.find((feature) => feature.properties.id === room?.scopeId)
+  const selectedDistrict = districts?.features.find((feature) => feature.properties.id === room?.districtId)
+  const selectedFeature = selectedDistrict ?? provinces?.features.find((feature) => feature.properties.id === room?.scopeId)
   const myPlayer = room?.players.find((player) => player.id === playerId)
   const myResult = room?.guesses.find((result) => result.playerId === playerId)
   const isHost = room?.hostId === playerId
@@ -266,6 +296,7 @@ function App() {
         rounds,
         timeLimit,
         provinceId: scopeId || null,
+        districtId: (scopeId && districtId) || null,
         solo,
       }, ack))
       setRoomFromResponse(response)
@@ -514,6 +545,12 @@ function App() {
                   fillOpacity: feature?.properties?.id === room.scopeId ? 0.14 : 0.04,
                 })}
               />}
+              {selectedDistrict && <LeafletGeoJSON
+                key={selectedDistrict.properties.id}
+                data={selectedDistrict}
+                interactive={false}
+                style={{ color: '#c0603a', weight: 2, opacity: 0.95, fillColor: '#e5aa83', fillOpacity: 0.18, dashArray: '5 4' }}
+              />}
               <FitMapToScope feature={selectedFeature} resetKey={room.roomCode} />
               <InvalidateMapSize resetKey={`${room.roomCode}-${mapExpanded}`} />
               <MapClickHandler disabled={!canGuess || busy} onSelect={setGuess} />
@@ -578,9 +615,11 @@ function App() {
             <div className="field-row">
               <div><label className="field-label" htmlFor="round-count">จำนวนรอบ</label><div className="select-wrap"><select id="round-count" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((count) => <option value={count} key={count}>{count} รอบ</option>)}</select><ChevronDown size={16} /></div></div>
               <div><label className="field-label" htmlFor="time-limit">เวลาต่อรอบ</label><div className="select-wrap"><select id="time-limit" value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))}>{TIME_LIMIT_OPTIONS.map((seconds) => <option value={seconds} key={seconds}>{formatTimeLimit(seconds)}</option>)}</select><ChevronDown size={16} /></div></div>
-              <div><label className="field-label" htmlFor="province-scope">ขอบเขตจังหวัด</label><div className="select-wrap"><select id="province-scope" value={scopeId} onChange={(event) => setScopeId(event.target.value)} disabled={!provinces}><option value="">สุ่มทั่วประเทศไทย</option>{provinceOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{feature.properties.name_th}</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="province-scope">ขอบเขตจังหวัด</label><div className="select-wrap"><select id="province-scope" value={scopeId} onChange={(event) => { setScopeId(event.target.value); setDistrictId('') }} disabled={!provinces}><option value="">สุ่มทั่วประเทศไทย</option>{provinceOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{feature.properties.name_th}</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="district-scope">ขอบเขตอำเภอ</label><div className="select-wrap"><select id="district-scope" value={districtId} onChange={(event) => setDistrictId(event.target.value)} disabled={!scopeId || !districts}><option value="">{!scopeId ? 'เลือกจังหวัดก่อน' : districts ? 'ทั้งจังหวัด' : 'กำลังโหลดอำเภอ...'}</option>{districtOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{districtLabel(feature.properties)}</option>)}</select><ChevronDown size={16} /></div></div>
             </div>
             {provinceError && <p className="error-text">{provinceError}</p>}
+            {districtError && <p className="error-text">{districtError}</p>}
             {error && <p className="error-text">{error}</p>}
             <div className="mode-tabs"><button className={!showJoin ? 'active' : ''} onClick={() => { setShowJoin(false); setError('') }}><Compass size={15} /> เล่นเลย</button><button className={showJoin ? 'active' : ''} onClick={() => { setShowJoin(true); setError('') }}><Users size={15} /> เข้าร่วมห้อง</button></div>
             {showJoin ? (
