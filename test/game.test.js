@@ -67,7 +67,11 @@ test('host and clients complete a multiplayer round without exposing the answer 
   assert.equal((await sendWithAck(host, 'game:guess', null)).ok, false)
   const hostReveal = waitForState(host, (state) => state.phase === 'reveal' && state.target?.address)
   const guestReveal = waitForState(guest, (state) => state.phase === 'reveal' && state.target?.address)
+  const guestSeesHostGuess = waitForState(guest, (state) => state.players.some((player) => player.hasGuessed))
   assert.equal((await sendWithAck(host, 'game:guess', { lat: 13.75, lng: 100.5 })).ok, true)
+  const midRound = await guestSeesHostGuess
+  assert.equal(midRound.phase, 'playing')
+  assert.ok(midRound.players.every((player) => player.score === 0 && player.roundPoints === 0))
   assert.equal((await sendWithAck(guest, 'game:guess', { lat: 14.25, lng: 100.5 })).ok, true)
   const revealed = await Promise.all([hostReveal, guestReveal])
   assert.ok(revealed.every((state) => state.target && state.guesses.length === 2))

@@ -232,7 +232,14 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
     }
   }
 
+  // คิดคะแนนตอนเฉลยเท่านั้น ระหว่างรอบจะได้ไม่มีใครเห็นคะแนนของคนที่ตอบก่อน
   function reveal(room) {
+    for (const player of room.players.values()) {
+      if (!player.guess) continue
+      player.distanceKm = distanceInKm(player.guess, room.target)
+      player.roundPoints = Math.round(5000 * Math.exp(-player.distanceKm / 200))
+      player.score += player.roundPoints
+    }
     room.phase = 'reveal'
     stopTimer(room)
     room.nextRoundAt = Date.now() + REVEAL_SECONDS * msPerSecond
@@ -423,9 +430,6 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       if (player.guess) return acknowledge?.({ ok: false, error: 'ส่งคำตอบรอบนี้ไปแล้ว' })
 
       player.guess = { lat, lng }
-      player.distanceKm = distanceInKm(player.guess, room.target)
-      player.roundPoints = Math.round(5000 * Math.exp(-player.distanceKm / 200))
-      player.score += player.roundPoints
       revealIfEveryoneGuessed(room)
       acknowledge?.({ ok: true })
       publish(room)
