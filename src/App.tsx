@@ -90,7 +90,7 @@ type ClientEvents = {
 // ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
 const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
 const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
-const TIME_LIMIT_OPTIONS = [30, 60, 90, 120, 0]
+const TIME_LIMIT_OPTIONS = [30, 60, 90, 120, 150, 180, 0]
 const districtLabel = (district: DistrictProperties) => `${district.provinceId === 'bangkok-metropolis' ? 'เขต' : 'อำเภอ'}${district.name_th}`
 // ลิงก์เชิญใช้ ?room=รหัสห้อง เปิดแล้วจะกรอกรหัสในช่องเข้าร่วมห้องให้
 const inviteCodeFromUrl = () => {
@@ -107,6 +107,10 @@ const formatHalfScoreDistance = (scaleKm: number) => {
   const km = scaleKm * Math.LN2
   return km < 1 ? `${Math.round(km * 1000).toLocaleString()} ม.` : `${km.toLocaleString(undefined, { maximumFractionDigits: km < 10 ? 1 : 0 })} กม.`
 }
+// ไม่เกิน 2 กม. แสดงเป็นเมตร
+const formatDistance = (km: number) => km <= 2
+  ? `${Math.round(km * 1000).toLocaleString()} ม.`
+  : `${km.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.`
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
 
 function formatTargetLocation(target: Target) {
@@ -688,7 +692,7 @@ function App() {
                     />
                     <Marker position={[result.lat, result.lng]} icon={playerGuessIcon(result.name, playerColorIndex(result.playerId), isMe)} zIndexOffset={isMe ? 500 : 0}>
                       <Tooltip direction="top" offset={[0, -14]} permanent className="player-tooltip">
-                        {isMe ? 'คุณ' : result.name} · {result.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.
+                        {isMe ? 'คุณ' : result.name} · {formatDistance(result.distanceKm)}
                       </Tooltip>
                     </Marker>
                   </Fragment>
@@ -709,7 +713,7 @@ function App() {
             </>
           ) : reveal ? (
             <>
-              <div className="result-summary"><small>{room.phase === 'finished' ? 'คะแนนสุดท้ายของคุณ' : 'คำตอบของคุณ'}</small><b>{myResult ? `${myResult.points.toLocaleString()} คะแนน` : '—'}</b><span>{myResult ? `ห่างจากจุดหมาย ${myResult.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.` : 'ไม่มีคำตอบในรอบนี้'}</span></div>
+              <div className="result-summary"><small>{room.phase === 'finished' ? 'คะแนนสุดท้ายของคุณ' : 'คำตอบของคุณ'}</small><b>{myResult ? `${myResult.points.toLocaleString()} คะแนน` : '—'}</b><span>{myResult ? `ห่างจากจุดหมาย ${formatDistance(myResult.distanceKm)}` : 'ไม่มีคำตอบในรอบนี้'}</span></div>
               {!scoresOpen && <button className="secondary-button scores-button" onClick={() => setScoresHidden('')}><Medal size={15} /> ตารางคะแนน</button>}
               {room.phase === 'finished'
                 ? <button className="primary-button next-button" onClick={leaveGame}>กลับหน้าหลัก <ArrowRight size={16} /></button>
@@ -737,7 +741,7 @@ function App() {
                       <span className={`rank rank-${index + 1}`}>{index + 1}</span>
                       <span className={`avatar avatar-${playerColorIndex(player.id)}`}>{player.name.slice(0, 1)}</span>
                       <span className="score-table-name">{player.name}{player.id === playerId && <small>คุณ</small>}</span>
-                      {room.phase !== 'finished' && <span className="score-table-round">{result ? <><b>+{result.points.toLocaleString()}</b><small>{result.distanceKm.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.</small></> : <small>ไม่ได้ตอบ</small>}</span>}
+                      {room.phase !== 'finished' && <span className="score-table-round">{result ? <><b>+{result.points.toLocaleString()}</b><small>{formatDistance(result.distanceKm)}</small></> : <small>ไม่ได้ตอบ</small>}</span>}
                       <b className="score-table-total">{player.score.toLocaleString()}</b>
                     </li>
                   )

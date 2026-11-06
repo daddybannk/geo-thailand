@@ -2,7 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto'
 
 const MAX_PLAYERS = 8
 // 0 = ไม่จับเวลา
-export const TIME_LIMITS = [0, 30, 60, 90, 120]
+export const TIME_LIMITS = [0, 30, 60, 90, 120, 150, 180]
 // เวลาดูเฉลยก่อนไปรอบถัดไปอัตโนมัติ
 export const REVEAL_SECONDS = 30
 // ชื่อสุ่มเมื่อผู้เล่นไม่ได้ตั้งชื่อ
