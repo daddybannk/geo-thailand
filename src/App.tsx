@@ -7,6 +7,7 @@ import {
   ChevronDown,
   CircleHelp,
   Clipboard,
+  Link2,
   Compass,
   Expand,
   Flag,
@@ -84,6 +85,15 @@ const serverUrl = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/$/, '')
 const socket: Socket<ServerEvents, ClientEvents> = serverUrl ? io(serverUrl, { autoConnect: true }) : io({ autoConnect: true })
 const TIME_LIMIT_OPTIONS = [30, 60, 90, 120, 0]
 const districtLabel = (district: DistrictProperties) => `${district.provinceId === 'bangkok-metropolis' ? 'เขต' : 'อำเภอ'}${district.name_th}`
+// ลิงก์เชิญใช้ ?room=รหัสห้อง เปิดแล้วจะกรอกรหัสในช่องเข้าร่วมห้องให้
+const inviteCodeFromUrl = () => {
+  const code = new URLSearchParams(window.location.search).get('room')?.trim().toUpperCase() ?? ''
+  return /^[A-Z0-9]{6}$/.test(code) ? code : ''
+}
+const inviteLinkFor = (roomCode: string) => `${window.location.origin}${window.location.pathname}?room=${roomCode}`
+const clearInviteFromUrl = () => {
+  if (window.location.search) window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+}
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
 
 function formatTargetLocation(target: Target) {
@@ -183,14 +193,14 @@ function App() {
   const [districtId, setDistrictId] = useState('')
   const [districts, setDistricts] = useState<DistrictCollection | null>(null)
   const [districtError, setDistrictError] = useState('')
-  const [joinCode, setJoinCode] = useState('')
-  const [showJoin, setShowJoin] = useState(false)
+  const [joinCode, setJoinCode] = useState(inviteCodeFromUrl)
+  const [showJoin, setShowJoin] = useState(() => Boolean(inviteCodeFromUrl()))
   // ผูกหมุดไว้กับรอบ เพื่อให้หมุดเก่าหายเองเมื่อขึ้นรอบใหม่
   const [guessDraft, setGuessDraft] = useState<{ roundKey: string; point: Point } | null>(null)
   const [scoresHidden, setScoresHidden] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'' | 'code' | 'link'>('')
   const [mapExpanded, setMapExpanded] = useState(false)
 
   useEffect(() => {
@@ -241,6 +251,10 @@ function App() {
         setGoogleConfigError(cause instanceof Error ? cause.message : 'ตรวจสอบการตั้งค่า Google Maps ไม่สำเร็จ')
       })
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (inviteCodeFromUrl()) document.getElementById('start')?.scrollIntoView()
   }, [])
 
   // โหลดขอบเขตอำเภอเมื่อต้องใช้เท่านั้น เพราะไฟล์ใหญ่กว่าจังหวัดหลายเท่า
@@ -309,6 +323,7 @@ function App() {
   }
 
   const setRoomFromResponse = (response: CreateRoomResult) => {
+    clearInviteFromUrl()
     setRoom(response.state)
     setPlayerId(response.playerId)
     setError('')
@@ -410,14 +425,14 @@ function App() {
     setError('')
   }
 
-  const copyRoomCode = async () => {
+  const copyInvite = async (kind: 'code' | 'link') => {
     if (!room) return
     try {
-      await navigator.clipboard.writeText(room.roomCode)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
+      await navigator.clipboard.writeText(kind === 'code' ? room.roomCode : inviteLinkFor(room.roomCode))
+      setCopied(kind)
+      window.setTimeout(() => setCopied(''), 1800)
     } catch {
-      setError('คัดลอกรหัสไม่ได้ กรุณาคัดลอกด้วยตัวเอง')
+      setError(kind === 'code' ? 'คัดลอกรหัสไม่ได้ กรุณาคัดลอกด้วยตัวเอง' : `คัดลอกลิงก์ไม่ได้ กรุณาคัดลอกด้วยตัวเอง: ${inviteLinkFor(room.roomCode)}`)
     }
   }
 
@@ -459,10 +474,13 @@ function App() {
         <section className="lobby-card">
           <span className="eyebrow"><Radio size={14} /> ห้องพร้อมแล้ว</span>
           <h1>ชวนเพื่อนมาออกสำรวจกัน</h1>
-          <p>ส่งรหัสห้องให้เพื่อน แล้วรอให้ทุกคนเข้ามาก่อนเริ่มเกม</p>
-          <button className="room-code-card" onClick={copyRoomCode}>
+          <p>ส่งลิงก์หรือรหัสห้องให้เพื่อน แล้วรอให้ทุกคนเข้ามาก่อนเริ่มเกม</p>
+          <button className="room-code-card" onClick={() => copyInvite('code')}>
             <small>รหัสห้อง</small><strong>{room.roomCode.split('').join(' ')}</strong>
-            <span>{copied ? <><Check size={14} /> คัดลอกแล้ว</> : <><Clipboard size={14} /> แตะเพื่อคัดลอก</>}</span>
+            <span>{copied === 'code' ? <><Check size={14} /> คัดลอกแล้ว</> : <><Clipboard size={14} /> แตะเพื่อคัดลอก</>}</span>
+          </button>
+          <button className="secondary-button invite-link-button" onClick={() => copyInvite('link')}>
+            {copied === 'link' ? <><Check size={15} /> คัดลอกลิงก์แล้ว</> : <><Link2 size={15} /> คัดลอกลิงก์เชิญเข้าเกม</>}
           </button>
           <div className="lobby-settings"><span><MapPin size={15} />{room.scopeName}</span><span><Flag size={15} />{room.totalRounds} รอบ</span><span><Timer size={15} />{formatTimeLimit(room.timeLimit)}</span></div>
           <div className="players-panel">
