@@ -222,7 +222,8 @@ function App() {
   const [copied, setCopied] = useState<'' | 'code' | 'link'>('')
   // null = ไม่ได้แก้ชื่ออยู่
   const [nameDraft, setNameDraft] = useState<string | null>(null)
-  const [mapExpanded, setMapExpanded] = useState(false)
+  // เก็บรอบที่ขยายแผนที่ไว้ ขึ้นรอบใหม่แล้วแผนที่จะย่อเอง
+  const [mapExpandedRound, setMapExpandedRound] = useState('')
 
   useEffect(() => {
     const onConnect = () => setConnected(true)
@@ -348,6 +349,7 @@ function App() {
   const canCreate = connected && Boolean(provinces) && !busy
   const currentRoundKey = room ? `${room.roomCode}-${room.currentRound}` : ''
   const guess = guessDraft?.roundKey === currentRoundKey ? guessDraft.point : null
+  const mapExpanded = Boolean(currentRoundKey) && mapExpandedRound === currentRoundKey
   const setGuess = (point: Point | null) => setGuessDraft(point && { roundKey: currentRoundKey, point })
   const currentViewControl = viewControl.roundKey === currentRoundKey
     ? viewControl
@@ -456,7 +458,6 @@ function App() {
     try {
       await emitWithAck((ack) => socket.emit('game:next', ack))
       setGuess(null)
-      setMapExpanded(false)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'ไปต่อไม่สำเร็จ')
     } finally {
@@ -470,7 +471,6 @@ function App() {
     setRoom(null)
     setPlayerId('')
     setGuess(null)
-    setMapExpanded(false)
     setError('')
   }
 
@@ -650,7 +650,7 @@ function App() {
         <section className={`guess-map-card ${mapExpanded ? 'expanded' : ''}`}>
           <div className="guess-map-header">
             <span><Map size={15} /> แผนที่สำหรับปักหมุด</span>
-            <button onClick={() => setMapExpanded((expanded) => !expanded)} aria-label={mapExpanded ? 'ย่อแผนที่' : 'ขยายแผนที่'}>
+            <button onClick={() => setMapExpandedRound(mapExpanded ? '' : currentRoundKey)} aria-label={mapExpanded ? 'ย่อแผนที่' : 'ขยายแผนที่'}>
               {mapExpanded ? <X size={15} /> : <Expand size={15} />}
             </button>
           </div>
