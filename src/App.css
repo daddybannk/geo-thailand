@@ -95,7 +95,8 @@
 .guess-map-header button { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 6px; color: #718278; background: transparent; }.guess-map-header button:hover { color: #355e4d; background: #eff4ef; }
 .guess-map-canvas { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #e9eee8; }
 .guess-map-canvas .leaflet-container { z-index: 0; }
-.guess-map-card.expanded { z-index: 1000; inset: 10px; width: auto; height: auto; }
+/* ขยายเป็นครึ่งจอขวา ใต้แถบบน เพื่อให้ยังเห็นภาพ Street View นาฬิกา และปุ่มส่งคำตอบทางซ้าย */
+.guess-map-card.expanded { z-index: 1000; top: 62px; right: 10px; bottom: 10px; left: 50%; width: auto; height: auto; }
 .guess-map-card.expanded .guess-map-header { height: 45px; }
 .guess-panel { bottom: 20px; left: 20px; width: min(380px, calc(100vw - 32px)); transform: none; }
 .guess-panel .error-text { position: absolute; top: 100%; left: 0; padding: 4px 8px; border-radius: 4px; background: #fff; }

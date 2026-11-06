@@ -182,7 +182,7 @@ function App() {
   const [provinces, setProvinces] = useState<ProvinceCollection | null>(null)
   const [provinceError, setProvinceError] = useState('')
   const [googleMapsConfigured, setGoogleMapsConfigured] = useState<boolean | null>(null)
-  const [cartoTileUrl, setCartoTileUrl] = useState('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png')
+  const [cartoTileUrl, setCartoTileUrl] = useState('')
   const [googleConfigError, setGoogleConfigError] = useState('')
   const [viewControl, setViewControl] = useState({ roundKey: '', turn: 0, fov: 90 })
   const [room, setRoom] = useState<RoomState | null>(null)
@@ -254,6 +254,7 @@ function App() {
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setCartoTileUrl('https://tile.openstreetmap.org/{z}/{x}/{y}.png')
         setGoogleConfigError(cause instanceof Error ? cause.message : 'ตรวจสอบการตั้งค่า Google Maps ไม่สำเร็จ')
       })
     return () => controller.abort()
@@ -615,13 +616,13 @@ function App() {
             </button>
           </div>
           <div className="guess-map-canvas">
-            <MapContainer center={[15.8, 101]} zoom={5} zoomControl minZoom={4} maxZoom={19} scrollWheelZoom>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attribution/">CARTO</a>'
+            <MapContainer center={[15.8, 101]} zoom={5} zoomControl minZoom={4} maxZoom={20} scrollWheelZoom>
+              {cartoTileUrl && <TileLayer
+                attribution={`&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors${cartoTileUrl.includes('cartocdn') ? ' &copy; <a href="https://carto.com/attribution/">CARTO</a>' : ''}`}
                 url={cartoTileUrl}
-                maxZoom={19}
+                maxZoom={20}
                 maxNativeZoom={18}
-              />
+              />}
               {provinces && <LeafletGeoJSON
                 data={provinces}
                 style={(feature) => ({

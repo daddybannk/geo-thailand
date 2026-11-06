@@ -41,9 +41,10 @@ app.get('/api/health', (_request, response) => {
 })
 
 app.get('/api/config', (_request, response) => {
+  // CARTO ต้องใช้ key ทุกแบบแล้ว ถ้าไม่มี key ใช้แผนที่มาตรฐานของ OpenStreetMap แทน
   const tileUrl = cartoBasemapKey
-    ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoBasemapKey)}`
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+    ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoBasemapKey)}`
+    : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   response.json({
     googleMapsConfigured: Boolean(googleMapsKey),
     cartoTileUrl: tileUrl,
