@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
@@ -10,6 +10,10 @@ const root = dirname(fileURLToPath(import.meta.url))
 const provincesPath = resolve(root, 'public/data/provinces.geojson')
 const provinces = JSON.parse(readFileSync(provincesPath, 'utf8')).features
 const districts = JSON.parse(readFileSync(resolve(root, 'public/data/districts.geojson'), 'utf8')).features
+const subdistrictsPath = resolve(root, 'public/data/subdistricts')
+const subdistricts = readdirSync(subdistrictsPath)
+  .filter((file) => file.endsWith('.geojson'))
+  .flatMap((file) => JSON.parse(readFileSync(resolve(subdistrictsPath, file), 'utf8')).features)
 const app = express()
 const httpServer = createServer(app)
 // รายชื่อ origin ของ frontend ที่แยก deploy (คั่นด้วย comma) เช่น https://geo-thailand.vercel.app
@@ -44,7 +48,7 @@ app.get('/api/config', (_request, response) => {
   })
 })
 
-const getRoundView = registerGameHandlers(io, provinces, { districts })
+const getRoundView = registerGameHandlers(io, provinces, { districts, subdistricts })
 
 app.get('/api/round-view/:roomCode', (request, response) => {
   const view = getRoundView(request.params.roomCode)

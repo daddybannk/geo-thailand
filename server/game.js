@@ -96,10 +96,11 @@ export function generateLocation(provinces, scopeId = null, random = Math.random
   throw new Error(`สุ่มตำแหน่งในจังหวัด${feature.properties.name_th}ไม่สำเร็จ`)
 }
 
-export function generateDistrictLocation(district, provinces, random = Math.random) {
-  const province = provinces.find((feature) => feature.properties.id === district.properties.provinceId)
-  const point = samplePoint(district, random)
-  if (!province || !point) throw new Error(`สุ่มตำแหน่งในอำเภอ${district.properties.name_th}ไม่สำเร็จ`)
+// สุ่มในอำเภอหรือตำบล (feature ที่มี properties.provinceId)
+export function generateAreaLocation(area, provinces, random = Math.random) {
+  const province = provinces.find((feature) => feature.properties.id === area.properties.provinceId)
+  const point = samplePoint(area, random)
+  if (!province || !point) throw new Error(`สุ่มตำแหน่งใน${area.properties.name_th}ไม่สำเร็จ`)
   return {
     ...point,
     provinceId: province.properties.id,
@@ -111,6 +112,11 @@ export function generateDistrictLocation(district, provinces, random = Math.rand
 export function districtLabel(district) {
   const prefix = district.properties.provinceId === 'bangkok-metropolis' ? 'เขต' : 'อำเภอ'
   return `${prefix}${district.properties.name_th}`
+}
+
+export function subdistrictLabel(subdistrict) {
+  const prefix = subdistrict.properties.provinceId === 'bangkok-metropolis' ? 'แขวง' : 'ตำบล'
+  return `${prefix}${subdistrict.properties.name_th}`
 }
 
 export function distanceInKm(first, second) {
@@ -173,7 +179,9 @@ function makeRoomCode(rooms) {
 function scopeNameFor(room) {
   if (!room.scopeId) return 'สุ่มทั่วประเทศไทย'
   const provinceName = room.provinces.find((feature) => feature.properties.id === room.scopeId).properties.name_th
-  return room.district ? `${districtLabel(room.district)} · ${provinceName}` : provinceName
+  return [room.subdistrict && subdistrictLabel(room.subdistrict), room.district && districtLabel(room.district), provinceName]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function makePublicState(room) {
@@ -191,6 +199,7 @@ function makePublicState(room) {
     serverNow: Date.now(),
     scopeId: room.scopeId,
     districtId: room.district?.properties.id ?? null,
+    subdistrictId: room.subdistrict?.properties.id ?? null,
     scopeName: scopeNameFor(room),
     players: [...room.players.values()].map(({ id, name, score, guess, roundPoints }) => ({
       id,
@@ -222,7 +231,7 @@ function makePublicState(room) {
 }
 
 // msPerSecond ใช้ย่นเวลาในชุดทดสอบ
-export function registerGameHandlers(io, provinces, { districts = [], findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
+export function registerGameHandlers(io, provinces, { districts = [], subdistricts = [], findAddress = lookupAddress, msPerSecond = 1000 } = {}) {
   const rooms = new Map()
 
   function publish(room) {
@@ -275,25 +284,31 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
         publish(room)
       }, room.timeLimit * msPerSecond)
     }
-    room.target = room.district
-      ? generateDistrictLocation(room.district, provinces)
-      : generateLocation(provinces, room.scopeId)
+    const area = room.subdistrict ?? room.district
+    room.target = area ? generateAreaLocation(area, provinces) : generateLocation(provinces, room.scopeId)
     room.heading = randomInt(360)
     const target = room.target
-    // undefined = กำลังค้นหา, null = ค้นหาไม่สำเร็จ
-    target.address = undefined
-    // อำเภอหาจากขอบเขตในเครื่องซึ่งแม่นกว่า Nominatim
+    // ตำบลและอำเภอหาจากขอบเขตในเครื่องก่อน ใช้ Nominatim เฉพาะเมื่อหาไม่เจอ (เช่น จุดชิดชายฝั่งหรือแนวเขต)
     const district = room.district ?? districts.find((feature) => (
       feature.properties.provinceId === target.provinceId && pointInProvince(target, feature)
     ))
-    findAddress(target)
-      .catch(() => null)
-      .then((found) => {
-        target.address = found || district
-          ? { subdistrict: found?.subdistrict ?? null, district: district ? districtLabel(district) : found?.district ?? null }
-          : null
-        if (room.target === target && (room.phase === 'reveal' || room.phase === 'finished')) publish(room)
-      })
+    const subdistrict = room.subdistrict ?? (district && subdistricts.find((feature) => (
+      feature.properties.districtId === district.properties.id && pointInProvince(target, feature)
+    )))
+    if (district && subdistrict) {
+      target.address = { subdistrict: subdistrictLabel(subdistrict), district: districtLabel(district) }
+    } else {
+      // undefined = กำลังค้นหา, null = ค้นหาไม่สำเร็จ
+      target.address = undefined
+      findAddress(target)
+        .catch(() => null)
+        .then((found) => {
+          target.address = found || district
+            ? { subdistrict: found?.subdistrict ?? null, district: district ? districtLabel(district) : found?.district ?? null }
+            : null
+          if (room.target === target && (room.phase === 'reveal' || room.phase === 'finished')) publish(room)
+        })
+    }
     for (const player of room.players.values()) {
       player.guess = null
       player.distanceKm = null
@@ -336,6 +351,8 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       const scopeId = typeof config.provinceId === 'string' ? config.provinceId : null
       const districtId = typeof config.districtId === 'string' ? config.districtId : null
       const district = districtId ? districts.find((feature) => feature.properties.id === districtId) : null
+      const subdistrictId = typeof config.subdistrictId === 'string' ? config.subdistrictId : null
+      const subdistrict = subdistrictId ? subdistricts.find((feature) => feature.properties.id === subdistrictId) : null
       const solo = config.solo === true
       const timeLimit = config.timeLimit === undefined ? 0 : Number(config.timeLimit)
       if (!Number.isInteger(rounds) || rounds < 1 || rounds > 10) {
@@ -349,6 +366,9 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       }
       if (districtId && (!district || district.properties.provinceId !== scopeId)) {
         return acknowledge?.({ ok: false, error: 'ไม่พบอำเภอที่เลือกในจังหวัดนี้' })
+      }
+      if (subdistrictId && (!subdistrict || !district || subdistrict.properties.districtId !== districtId)) {
+        return acknowledge?.({ ok: false, error: 'ไม่พบตำบลที่เลือกในอำเภอนี้' })
       }
 
       const code = makeRoomCode(rooms)
@@ -366,6 +386,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
         timer: null,
         scopeId,
         district,
+        subdistrict,
         target: null,
         players: new Map([[playerId, {
           id: playerId,

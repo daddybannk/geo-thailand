@@ -45,6 +45,8 @@ type ProvinceProperties = { id: string; name_en: string; name_th: string; region
 type ProvinceCollection = FeatureCollection<Geometry, ProvinceProperties>
 type DistrictProperties = { id: string; name_th: string; provinceId: string }
 type DistrictCollection = FeatureCollection<Geometry, DistrictProperties>
+type SubdistrictProperties = DistrictProperties & { districtId: string }
+type SubdistrictCollection = FeatureCollection<Geometry, SubdistrictProperties>
 type Point = { lat: number; lng: number }
 type Player = { id: string; name: string; score: number; hasGuessed: boolean; roundPoints: number }
 type GuessResult = Point & { playerId: string; name: string; distanceKm: number; points: number }
@@ -63,6 +65,7 @@ type RoomState = {
   serverNow: number
   scopeId: string | null
   districtId: string | null
+  subdistrictId: string | null
   scopeName: string
   players: Player[]
   target?: Target
@@ -72,7 +75,7 @@ type Ack<T = Record<string, never>> = { ok: boolean; error?: string } & T
 type CreateRoomResult = { roomCode: string; playerId: string; state: RoomState }
 type ServerEvents = { 'room:state': (state: RoomState) => void }
 type ClientEvents = {
-  'room:create': (config: { name: string; rounds: number; timeLimit: number; provinceId: string | null; districtId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
+  'room:create': (config: { name: string; rounds: number; timeLimit: number; provinceId: string | null; districtId: string | null; subdistrictId: string | null; solo: boolean }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'room:join': (config: { name: string; roomCode: string }, ack: (response: Ack<CreateRoomResult>) => void) => void
   'game:start': (ack: (response: Ack) => void) => void
   'game:guess': (point: Point, ack: (response: Ack) => void) => void
@@ -94,6 +97,7 @@ const inviteLinkFor = (roomCode: string) => `${window.location.origin}${window.l
 const clearInviteFromUrl = () => {
   if (window.location.search) window.history.replaceState(null, '', window.location.pathname + window.location.hash)
 }
+const subdistrictLabel = (subdistrict: SubdistrictProperties) => `${subdistrict.provinceId === 'bangkok-metropolis' ? 'แขวง' : 'ตำบล'}${subdistrict.name_th}`
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
 
 function formatTargetLocation(target: Target) {
@@ -193,6 +197,8 @@ function App() {
   const [districtId, setDistrictId] = useState('')
   const [districts, setDistricts] = useState<DistrictCollection | null>(null)
   const [districtError, setDistrictError] = useState('')
+  const [subdistrictId, setSubdistrictId] = useState('')
+  const [subdistricts, setSubdistricts] = useState<{ provinceId: string; data: SubdistrictCollection } | null>(null)
   const [joinCode, setJoinCode] = useState(inviteCodeFromUrl)
   const [showJoin, setShowJoin] = useState(() => Boolean(inviteCodeFromUrl()))
   // ผูกหมุดไว้กับรอบ เพื่อให้หมุดเก่าหายเองเมื่อขึ้นรอบใหม่
@@ -275,6 +281,29 @@ function App() {
     return () => controller.abort()
   }, [needDistricts, districts])
 
+  // ตำบลแยกไฟล์ตามจังหวัด โหลดเมื่อเลือกอำเภอแล้ว หรือเข้าห้องที่กำหนดตำบลไว้
+  const subdistrictProvinceId = room ? (room.subdistrictId ? room.scopeId ?? '' : '') : districtId ? scopeId : ''
+  useEffect(() => {
+    if (!subdistrictProvinceId || subdistricts?.provinceId === subdistrictProvinceId) return
+    const controller = new AbortController()
+    fetch(`/data/subdistricts/${encodeURIComponent(subdistrictProvinceId)}.geojson`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('โหลดรายชื่อตำบลไม่สำเร็จ')
+        return response.json() as Promise<SubdistrictCollection>
+      })
+      .then((data) => setSubdistricts({ provinceId: subdistrictProvinceId, data }))
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
+        setDistrictError(cause instanceof Error ? cause.message : 'โหลดรายชื่อตำบลไม่สำเร็จ')
+      })
+    return () => controller.abort()
+  }, [subdistrictProvinceId, subdistricts])
+  const subdistrictsReady = Boolean(districtId) && subdistricts?.provinceId === scopeId
+  const subdistrictOptions = useMemo(
+    () => (subdistrictsReady ? subdistricts?.data.features ?? [] : []).filter((feature) => feature.properties.districtId === districtId),
+    [subdistricts, subdistrictsReady, districtId],
+  )
+
   const districtOptions = useMemo(
     () => (districts?.features ?? []).filter((feature) => feature.properties.provinceId === scopeId),
     [districts, scopeId],
@@ -284,7 +313,9 @@ function App() {
     [provinces],
   )
   const selectedDistrict = districts?.features.find((feature) => feature.properties.id === room?.districtId)
-  const selectedFeature = selectedDistrict ?? provinces?.features.find((feature) => feature.properties.id === room?.scopeId)
+  const selectedSubdistrict = subdistricts?.data.features.find((feature) => feature.properties.id === room?.subdistrictId)
+  const selectedArea = selectedSubdistrict ?? selectedDistrict
+  const selectedFeature = selectedArea ?? provinces?.features.find((feature) => feature.properties.id === room?.scopeId)
   const myPlayer = room?.players.find((player) => player.id === playerId)
   const myResult = room?.guesses.find((result) => result.playerId === playerId)
   const isHost = room?.hostId === playerId
@@ -340,6 +371,7 @@ function App() {
         timeLimit,
         provinceId: scopeId || null,
         districtId: (scopeId && districtId) || null,
+        subdistrictId: (scopeId && districtId && subdistrictId) || null,
         solo,
       }, ack))
       setRoomFromResponse(response)
@@ -600,9 +632,9 @@ function App() {
                   fillOpacity: feature?.properties?.id === room.scopeId ? 0.14 : 0.04,
                 })}
               />}
-              {selectedDistrict && <LeafletGeoJSON
-                key={selectedDistrict.properties.id}
-                data={selectedDistrict}
+              {selectedArea && <LeafletGeoJSON
+                key={selectedArea.properties.id}
+                data={selectedArea}
                 interactive={false}
                 style={{ color: '#c0603a', weight: 2, opacity: 0.95, fillColor: '#e5aa83', fillOpacity: 0.18, dashArray: '5 4' }}
               />}
@@ -719,8 +751,9 @@ function App() {
             <div className="field-row">
               <div><label className="field-label" htmlFor="round-count">จำนวนรอบ</label><div className="select-wrap"><select id="round-count" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((count) => <option value={count} key={count}>{count} รอบ</option>)}</select><ChevronDown size={16} /></div></div>
               <div><label className="field-label" htmlFor="time-limit">เวลาต่อรอบ</label><div className="select-wrap"><select id="time-limit" value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))}>{TIME_LIMIT_OPTIONS.map((seconds) => <option value={seconds} key={seconds}>{formatTimeLimit(seconds)}</option>)}</select><ChevronDown size={16} /></div></div>
-              <div><label className="field-label" htmlFor="province-scope">ขอบเขตจังหวัด</label><div className="select-wrap"><select id="province-scope" value={scopeId} onChange={(event) => { setScopeId(event.target.value); setDistrictId('') }} disabled={!provinces}><option value="">สุ่มทั่วประเทศไทย</option>{provinceOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{feature.properties.name_th}</option>)}</select><ChevronDown size={16} /></div></div>
-              <div><label className="field-label" htmlFor="district-scope">ขอบเขตอำเภอ</label><div className="select-wrap"><select id="district-scope" value={districtId} onChange={(event) => setDistrictId(event.target.value)} disabled={!scopeId || !districts}><option value="">{!scopeId ? 'เลือกจังหวัดก่อน' : districts ? 'ทั้งจังหวัด' : 'กำลังโหลดอำเภอ...'}</option>{districtOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{districtLabel(feature.properties)}</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="province-scope">ขอบเขตจังหวัด</label><div className="select-wrap"><select id="province-scope" value={scopeId} onChange={(event) => { setScopeId(event.target.value); setDistrictId(''); setSubdistrictId('') }} disabled={!provinces}><option value="">สุ่มทั่วประเทศไทย</option>{provinceOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{feature.properties.name_th}</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="district-scope">ขอบเขตอำเภอ</label><div className="select-wrap"><select id="district-scope" value={districtId} onChange={(event) => { setDistrictId(event.target.value); setSubdistrictId('') }} disabled={!scopeId || !districts}><option value="">{!scopeId ? 'เลือกจังหวัดก่อน' : districts ? 'ทั้งจังหวัด' : 'กำลังโหลดอำเภอ...'}</option>{districtOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{districtLabel(feature.properties)}</option>)}</select><ChevronDown size={16} /></div></div>
+              <div><label className="field-label" htmlFor="subdistrict-scope">ขอบเขตตำบล</label><div className="select-wrap"><select id="subdistrict-scope" value={subdistrictId} onChange={(event) => setSubdistrictId(event.target.value)} disabled={!subdistrictsReady}><option value="">{!districtId ? 'เลือกอำเภอก่อน' : subdistrictsReady ? 'ทั้งอำเภอ' : 'กำลังโหลดตำบล...'}</option>{subdistrictOptions.map((feature) => <option value={feature.properties.id} key={feature.properties.id}>{subdistrictLabel(feature.properties)}</option>)}</select><ChevronDown size={16} /></div></div>
             </div>
             {provinceError && <p className="error-text">{provinceError}</p>}
             {districtError && <p className="error-text">{districtError}</p>}
