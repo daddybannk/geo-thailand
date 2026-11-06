@@ -5,6 +5,12 @@ const MAX_PLAYERS = 8
 export const TIME_LIMITS = [0, 30, 60, 90, 120]
 // เวลาดูเฉลยก่อนไปรอบถัดไปอัตโนมัติ
 export const REVEAL_SECONDS = 15
+// ชื่อสุ่มเมื่อผู้เล่นไม่ได้ตั้งชื่อ
+export const AQUATIC_NAMES = [
+  'ปลาทู', 'ปลาบึก', 'ปลากัด', 'ปลานิล', 'ปลาหมึก', 'ปลาการ์ตูน', 'ปลาโลมา', 'ปลาวาฬ', 'ปลาฉลาม', 'ปลากระเบน',
+  'ปลาดาว', 'ปลาปักเป้า', 'ปลาทอง', 'ปลาช่อน', 'ปลาตะเพียน', 'ปลาสลิด', 'ปลาไหล', 'ม้าน้ำ', 'เต่าทะเล', 'แมงกะพรุน',
+  'ปูม้า', 'กุ้งมังกร', 'หอยเชลล์', 'พะยูน', 'แมวน้ำ', 'นากทะเล', 'ปลาฉลามวาฬ', 'ปลากระเบนราหู', 'ปลิงทะเล', 'กุ้งก้ามกราม',
+]
 const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 function polygonsFor(feature) {
@@ -146,6 +152,14 @@ export async function lookupAddress({ lat, lng }) {
     subdistrict: findAddressPart(address, ['ตำบล', 'แขวง']) ?? address.village ?? null,
     district: findAddressPart(address, ['อำเภอ', 'เขต']),
   }
+}
+
+function pickPlayerName(name, room, random = Math.random) {
+  if (name) return name
+  const taken = new Set(room ? [...room.players.values()].map((player) => player.name) : [])
+  const available = AQUATIC_NAMES.filter((candidate) => !taken.has(candidate))
+  const pool = available.length ? available : AQUATIC_NAMES
+  return pool[Math.floor(random() * pool.length)]
 }
 
 function makeRoomCode(rooms) {
@@ -355,7 +369,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
         target: null,
         players: new Map([[playerId, {
           id: playerId,
-          name: name || 'นักสำรวจ',
+          name: pickPlayerName(name),
           score: 0,
           guess: null,
           distanceKm: null,
@@ -388,7 +402,7 @@ export function registerGameHandlers(io, provinces, { districts = [], findAddres
       const name = typeof config.name === 'string' ? config.name.trim().slice(0, 18) : ''
       room.players.set(playerId, {
         id: playerId,
-        name: name || 'นักสำรวจ',
+        name: pickPlayerName(name, room),
         score: 0,
         guess: null,
         distanceKm: null,

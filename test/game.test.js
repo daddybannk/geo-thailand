@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { Server } from 'socket.io'
 import { io as createClient } from 'socket.io-client'
-import { distanceInKm, districtLabel, generateDistrictLocation, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
+import { AQUATIC_NAMES, distanceInKm, districtLabel, generateDistrictLocation, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
 
 const provinces = JSON.parse(readFileSync(new URL('../public/data/provinces.geojson', import.meta.url))).features
 const districts = JSON.parse(readFileSync(new URL('../public/data/districts.geojson', import.meta.url))).features
@@ -124,6 +124,36 @@ test('district-scoped rooms validate the district and reveal its name', async (c
   const state = await revealed
   assert.equal(state.target.provinceId, 'chiang-mai')
   assert.deepEqual(state.target.address, { subdistrict: 'ตำบลทดสอบ', district: districtLabel(district) })
+})
+
+test('players without a name get distinct random aquatic animal names', async (context) => {
+  const httpServer = createServer()
+  const ioServer = new Server(httpServer)
+  registerGameHandlers(ioServer, provinces, { findAddress: async () => null })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const url = `http://127.0.0.1:${httpServer.address().port}`
+  const clients = Array.from({ length: 4 }, () => createClient(url, { transports: ['websocket'] }))
+  context.after(async () => {
+    for (const client of clients) client.disconnect()
+    await new Promise((resolve) => ioServer.close(resolve))
+  })
+  await Promise.all(clients.map((client) => waitForEvent(client, 'connect')))
+
+  const [host, named, ...guests] = clients
+  const created = await sendWithAck(host, 'room:create', { name: '   ', rounds: 1, timeLimit: 0, provinceId: null, solo: false })
+  assert.equal((await sendWithAck(named, 'room:join', { name: 'Ben', roomCode: created.roomCode })).ok, true)
+  let state
+  for (const guest of guests) {
+    const joined = await sendWithAck(guest, 'room:join', { name: '', roomCode: created.roomCode })
+    assert.equal(joined.ok, true)
+    state = joined.state
+  }
+  const names = state.players.map((player) => player.name)
+  assert.ok(names.includes('Ben'))
+  const randomNames = names.filter((name) => name !== 'Ben')
+  assert.equal(randomNames.length, 3)
+  assert.ok(randomNames.every((name) => AQUATIC_NAMES.includes(name)))
+  assert.equal(new Set(randomNames).size, randomNames.length)
 })
 
 test('timed rounds reveal automatically and advance after the reveal pause', async (context) => {

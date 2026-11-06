@@ -335,7 +335,7 @@ function App() {
     try {
       await ensureConnected()
       const response = await emitWithAck<CreateRoomResult>((ack) => socket.emit('room:create', {
-        name: playerName.trim() || 'นักสำรวจ',
+        name: playerName.trim(),
         rounds,
         timeLimit,
         provinceId: scopeId || null,
@@ -356,7 +356,7 @@ function App() {
     try {
       await ensureConnected()
       const response = await emitWithAck<CreateRoomResult>((ack) => socket.emit('room:join', {
-        name: playerName.trim() || 'นักสำรวจ',
+        name: playerName.trim(),
         roomCode: joinCode.trim().toUpperCase(),
       }, ack))
       setRoomFromResponse(response)
@@ -713,7 +713,7 @@ function App() {
         <div className="setup-card">
           <div className="setup-fields">
             <label className="field-label" htmlFor="player-name">ชื่อที่ใช้ในเกม</label>
-            <input id="player-name" className="text-input" value={playerName} maxLength={18} placeholder="เช่น นักเดินทาง" onChange={(event) => setPlayerName(event.target.value)} />
+            <input id="player-name" className="text-input" value={playerName} maxLength={18} placeholder="เว้นว่างไว้เพื่อสุ่มชื่อสัตว์น้ำ" onChange={(event) => setPlayerName(event.target.value)} />
             <div className="field-row">
               <div><label className="field-label" htmlFor="round-count">จำนวนรอบ</label><div className="select-wrap"><select id="round-count" value={rounds} onChange={(event) => setRounds(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map((count) => <option value={count} key={count}>{count} รอบ</option>)}</select><ChevronDown size={16} /></div></div>
               <div><label className="field-label" htmlFor="time-limit">เวลาต่อรอบ</label><div className="select-wrap"><select id="time-limit" value={timeLimit} onChange={(event) => setTimeLimit(Number(event.target.value))}>{TIME_LIMIT_OPTIONS.map((seconds) => <option value={seconds} key={seconds}>{formatTimeLimit(seconds)}</option>)}</select><ChevronDown size={16} /></div></div>
