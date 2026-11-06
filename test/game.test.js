@@ -72,7 +72,7 @@ test('host and clients complete a multiplayer round without exposing the answer 
   assert.equal(joined.ok, true)
   assert.equal(joined.state.players.length, 2)
   const renamed = waitForState(host, (state) => state.players.some((player) => player.name === 'Guest 2'))
-  assert.equal((await sendWithAck(guest, 'player:rename', '  Guest 2  ')).ok, true)
+  assert.deepEqual(await sendWithAck(guest, 'player:rename', '  Guest 2  '), { ok: true, name: 'Guest 2' })
   await renamed
   const unauthorizedStart = await sendWithAck(guest, 'game:start')
   assert.equal(unauthorizedStart.ok, false)

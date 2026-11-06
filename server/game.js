@@ -502,7 +502,7 @@ export function registerGameHandlers(io, provinces, { districts = [], subdistric
       if (room.phase !== 'lobby') return acknowledge?.({ ok: false, error: 'เปลี่ยนชื่อได้เฉพาะตอนรอเริ่มเกม' })
       const name = typeof payload === 'string' ? payload.trim().slice(0, 18) : ''
       player.name = pickPlayerName(name, room)
-      acknowledge?.({ ok: true })
+      acknowledge?.({ ok: true, name: player.name })
       publish(room)
     })
 

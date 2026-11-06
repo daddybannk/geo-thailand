@@ -84,7 +84,7 @@ type ClientEvents = {
   'game:guess': (point: Point, ack: (response: Ack) => void) => void
   'game:next': (ack: (response: Ack) => void) => void
   'room:leave': () => void
-  'player:rename': (name: string, ack: (response: Ack) => void) => void
+  'player:rename': (name: string, ack: (response: Ack<{ name: string }>) => void) => void
 }
 
 // ว่างไว้เมื่อ frontend และ backend อยู่ origin เดียวกัน; ตั้งเป็น URL ของ backend เมื่อแยก deploy (เช่น frontend บน Vercel)
@@ -111,6 +111,7 @@ const formatHalfScoreDistance = (scaleKm: number) => {
 const formatDistance = (km: number) => km <= 5
   ? `${Math.round(km * 1000).toLocaleString()} ม.`
   : `${km.toLocaleString(undefined, { maximumFractionDigits: 1 })} กม.`
+const PLAYER_NAME_KEY = 'geo-thailand:player-name'
 const formatTimeLimit = (seconds: number) => seconds ? `${seconds} วินาที` : 'ไม่จับเวลา'
 
 function formatTargetLocation(target: Target) {
@@ -200,7 +201,14 @@ function App() {
   const [viewControl, setViewControl] = useState({ roundKey: '', turn: 0, fov: 90 })
   const [room, setRoom] = useState<RoomState | null>(null)
   const [playerId, setPlayerId] = useState('')
-  const [playerName, setPlayerName] = useState('')
+  // จำชื่อไว้ (รวมชื่อที่สุ่มได้) เพื่อใช้ชื่อเดิมในเกมถัดไปและหลังรีเฟรช
+  const [playerName, setPlayerName] = useState(() => {
+    try {
+      return window.localStorage.getItem(PLAYER_NAME_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [rounds, setRounds] = useState(5)
   const [timeLimit, setTimeLimit] = useState(90)
   const [now, setNow] = useState(() => Date.now())
@@ -336,6 +344,13 @@ function App() {
   const myPlayer = room?.players.find((player) => player.id === playerId)
   const myResult = room?.guesses.find((result) => result.playerId === playerId)
   const isHost = room?.hostId === playerId
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PLAYER_NAME_KEY, playerName.trim())
+    } catch {
+      // ไม่มี storage (เช่น private mode) ก็แค่จำชื่อไม่ได้
+    }
+  }, [playerName])
   const canGuess = room?.phase === 'playing' && !myPlayer?.hasGuessed
   // เวลาหมดรอบตอนเล่น หรือเวลาขึ้นรอบถัดไปตอนเฉลย
   const deadline = room?.phase === 'playing' ? room.roundEndsAt : room?.phase === 'reveal' ? room.nextRoundAt : null
@@ -375,6 +390,8 @@ function App() {
     clearInviteFromUrl()
     setRoom(response.state)
     setPlayerId(response.playerId)
+    const me = response.state.players.find((player) => player.id === response.playerId)
+    if (me) setPlayerName(me.name)
     setError('')
   }
 
@@ -479,8 +496,8 @@ function App() {
     setBusy(true)
     setError('')
     try {
-      await emitWithAck((ack) => socket.emit('player:rename', nameDraft, ack))
-      setPlayerName(nameDraft.trim())
+      const response = await emitWithAck<{ name: string }>((ack) => socket.emit('player:rename', nameDraft, ack))
+      setPlayerName(response.name)
       setNameDraft(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'เปลี่ยนชื่อไม่สำเร็จ')
