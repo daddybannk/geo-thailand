@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { Server } from 'socket.io'
 import { io as createClient } from 'socket.io-client'
-import { LAND_ANIMAL_NAMES, distanceInKm, scoreForDistance, scoreScaleFor, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
+import { LAND_ANIMAL_NAMES, MAX_SCORE, distanceInKm, scoreForDistance, scoreScaleFor, districtLabel, generateAreaLocation, subdistrictLabel, generateLocation, pointInProvince, registerGameHandlers } from '../server/game.js'
 
 const provinces = JSON.parse(readFileSync(new URL('../public/data/provinces.geojson', import.meta.url))).features
 const districts = JSON.parse(readFileSync(new URL('../public/data/districts.geojson', import.meta.url))).features
@@ -27,11 +27,12 @@ test('scores scale with the size of the room scope', () => {
   assert.ok(countryScale > 150 && countryScale < 250)
   assert.ok(bangkokScale < countryScale / 10)
   assert.ok(scoreScaleFor([subdistricts[0]]) >= 0.5)
-  assert.equal(scoreForDistance(0.02, bangkokScale), 5000)
-  assert.ok(scoreForDistance(0.1, bangkokScale) < 5000)
+  assert.equal(MAX_SCORE, 1000)
+  assert.equal(scoreForDistance(0.01, bangkokScale), 1000)
+  assert.ok(scoreForDistance(0.02, bangkokScale) < 1000)
   // ห่าง 10 กม. ทั่วประเทศยังได้คะแนนสูง แต่ในกรุงเทพฯ ได้น้อยลงมาก
-  assert.ok(scoreForDistance(10, countryScale) > 4500)
-  assert.ok(scoreForDistance(10, bangkokScale) < 2500)
+  assert.ok(scoreForDistance(10, countryScale) > 900)
+  assert.ok(scoreForDistance(10, bangkokScale) < 500)
 })
 
 test('distance calculations and province validation are well defined', () => {

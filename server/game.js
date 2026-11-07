@@ -135,10 +135,12 @@ export function scoreScaleFor(features) {
   return Math.max(0.5, diagonal / 10)
 }
 
-// ปักห่างไม่เกิน 25 ม. ได้เต็ม 5,000
+export const MAX_SCORE = 1000
+
+// ปักห่างไม่เกิน 10 ม. ได้เต็ม
 export function scoreForDistance(distanceKm, scaleKm) {
-  if (distanceKm <= 0.025) return 5000
-  return Math.round(5000 * Math.exp(-distanceKm / scaleKm))
+  if (distanceKm <= 0.01) return MAX_SCORE
+  return Math.round(MAX_SCORE * Math.exp(-distanceKm / scaleKm))
 }
 
 function findAddressPart(address, prefixes) {
@@ -209,6 +211,7 @@ function makePublicState(room) {
     timeLimit: room.timeLimit,
     scoreScaleKm: room.scoreScaleKm,
     revealSeconds: REVEAL_SECONDS,
+    maxScore: MAX_SCORE,
     roundEndsAt: room.phase === 'playing' ? room.roundEndsAt : null,
     nextRoundAt: room.phase === 'reveal' ? room.nextRoundAt : null,
     serverNow: Date.now(),

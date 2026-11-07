@@ -63,6 +63,7 @@ type RoomState = {
   timeLimit: number
   scoreScaleKm: number
   revealSeconds: number
+  maxScore: number
   roundEndsAt: number | null
   nextRoundAt: number | null
   serverNow: number
@@ -102,7 +103,7 @@ const clearInviteFromUrl = () => {
   if (window.location.search) window.history.replaceState(null, '', window.location.pathname + window.location.hash)
 }
 const subdistrictLabel = (subdistrict: SubdistrictProperties) => `${subdistrict.provinceId === 'bangkok-metropolis' ? 'แขวง' : 'ตำบล'}${subdistrict.name_th}`
-// ระยะที่ได้คะแนนครึ่งหนึ่ง (2,500) = scale × ln 2
+// ระยะที่ได้คะแนนครึ่งหนึ่งของคะแนนเต็ม = scale × ln 2
 const formatHalfScoreDistance = (scaleKm: number) => {
   const km = scaleKm * Math.LN2
   return km < 1 ? `${Math.round(km * 1000).toLocaleString()} ม.` : `${km.toLocaleString(undefined, { maximumFractionDigits: km < 10 ? 1 : 0 })} กม.`
@@ -563,7 +564,7 @@ function App() {
           <button className="secondary-button invite-link-button" onClick={() => copyInvite('link')}>
             {copied === 'link' ? <><Check size={15} /> คัดลอกลิงก์แล้ว</> : <><Link2 size={15} /> คัดลอกลิงก์เชิญเข้าเกม</>}
           </button>
-          <div className="lobby-settings"><span><MapPin size={15} />{room.scopeName}</span><span><Flag size={15} />{room.totalRounds} รอบ</span><span><Timer size={15} />{formatTimeLimit(room.timeLimit)}</span><span title="ระยะห่างที่ทำให้ได้ครึ่งหนึ่งของคะแนนเต็ม ปรับตามขนาดขอบเขต"><Medal size={15} />ห่าง {formatHalfScoreDistance(room.scoreScaleKm)} ได้ 2,500</span></div>
+          <div className="lobby-settings"><span><MapPin size={15} />{room.scopeName}</span><span><Flag size={15} />{room.totalRounds} รอบ</span><span><Timer size={15} />{formatTimeLimit(room.timeLimit)}</span><span title="ระยะห่างที่ทำให้ได้ครึ่งหนึ่งของคะแนนเต็ม ปรับตามขนาดขอบเขต"><Medal size={15} />ห่าง {formatHalfScoreDistance(room.scoreScaleKm)} ได้ {(room.maxScore / 2).toLocaleString()} จาก {room.maxScore.toLocaleString()}</span></div>
           <div className="players-panel">
             <div className="players-heading">นักสำรวจในห้อง <small>{room.players.length} คน</small></div>
             {room.players.map((player, index) => (
