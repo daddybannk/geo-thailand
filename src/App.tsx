@@ -18,15 +18,11 @@ import {
   Pencil,
   MousePointer2,
   Radio,
-  RotateCcw,
-  RotateCw,
   Send,
   Sparkles,
   Timer,
   Users,
   X,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react'
 import {
   GeoJSON as LeafletGeoJSON,
@@ -199,7 +195,6 @@ function App() {
   const [googleMapsConfigured, setGoogleMapsConfigured] = useState<boolean | null>(null)
   const [cartoTileUrl, setCartoTileUrl] = useState('')
   const [googleConfigError, setGoogleConfigError] = useState('')
-  const [viewControl, setViewControl] = useState({ roundKey: '', turn: 0, fov: 90 })
   const [room, setRoom] = useState<RoomState | null>(null)
   const [playerId, setPlayerId] = useState('')
   // จำชื่อไว้ (รวมชื่อที่สุ่มได้) เพื่อใช้ชื่อเดิมในเกมถัดไปและหลังรีเฟรช
@@ -367,9 +362,6 @@ function App() {
   const guess = guessDraft?.roundKey === currentRoundKey ? guessDraft.point : null
   const mapExpanded = Boolean(currentRoundKey) && mapExpandedRound === currentRoundKey
   const setGuess = (point: Point | null) => setGuessDraft(point && { roundKey: currentRoundKey, point })
-  const currentViewControl = viewControl.roundKey === currentRoundKey
-    ? viewControl
-    : { roundKey: currentRoundKey, turn: 0, fov: 90 }
 
   const ensureConnected = async () => {
     if (socket.connected) return
@@ -518,19 +510,6 @@ function App() {
     }
   }
 
-  const adjustStreetView = (turnDelta: number, fovDelta: number) => {
-    setViewControl((current) => {
-      const base = current.roundKey === currentRoundKey
-        ? current
-        : { roundKey: currentRoundKey, turn: 0, fov: 90 }
-      return {
-        roundKey: currentRoundKey,
-        turn: ((base.turn + turnDelta + 360) % 360 + 360) % 360,
-        fov: Math.max(10, Math.min(100, base.fov + fovDelta)),
-      }
-    })
-  }
-
   const enterStreetViewFullscreen = async () => {
     const frame = document.querySelector<HTMLIFrameElement>('.street-view-frame iframe')
     if (!frame) {
@@ -613,8 +592,8 @@ function App() {
         <div className="street-view-frame">
           {googleMapsConfigured ? (
             <iframe
-              key={`${currentRoundKey}-${currentViewControl.turn}-${currentViewControl.fov}`}
-              src={`${serverUrl}/api/round-view/${encodeURIComponent(room.roomCode)}?round=${room.currentRound}&turn=${currentViewControl.turn}&fov=${currentViewControl.fov}`}
+              key={currentRoundKey}
+              src={`${serverUrl}/api/round-view/${encodeURIComponent(room.roomCode)}?round=${room.currentRound}`}
               title="Google Maps Street View"
               allowFullScreen
               referrerPolicy="strict-origin-when-cross-origin"
@@ -633,12 +612,6 @@ function App() {
         </div>
         {googleMapsConfigured && (
           <div className="street-view-controls" role="group" aria-label="ควบคุมภาพ Street View">
-            <button type="button" aria-label="หมุนภาพไปทางซ้าย" title="หมุนซ้าย 45°" onClick={() => adjustStreetView(-45, 0)}><RotateCcw size={17} /></button>
-            <button type="button" aria-label="หมุนภาพไปทางขวา" title="หมุนขวา 45°" onClick={() => adjustStreetView(45, 0)}><RotateCw size={17} /></button>
-            <span className="street-control-divider" />
-            <button type="button" aria-label="ซูมเข้า" title="ซูมเข้า" disabled={currentViewControl.fov <= 10} onClick={() => adjustStreetView(0, -15)}><ZoomIn size={17} /></button>
-            <button type="button" aria-label="ซูมออก" title="ซูมออก" disabled={currentViewControl.fov >= 100} onClick={() => adjustStreetView(0, 15)}><ZoomOut size={17} /></button>
-            <span className="street-control-divider" />
             <button type="button" aria-label="ขยายภาพเต็มจอ" title="ขยายภาพเต็มจอ" onClick={enterStreetViewFullscreen}><Expand size={16} /></button>
           </div>
         )}

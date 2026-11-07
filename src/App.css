@@ -108,7 +108,7 @@ body:has(.game-screen) { overflow: hidden; }.game-screen .leaflet-container { po
 .street-view-controls button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; color: #536f61; background: transparent; }
 .street-view-controls button:not(:disabled):hover { color: #2f5c4a; background: #edf3ee; }
 .street-view-controls button:disabled { color: #bcc4bd; }
-.street-control-divider { height: 20px; margin-inline: 3px; border-left: 1px solid #e5eae4; }
+
 .street-view-controls::after { position: absolute; top: calc(100% + 6px); left: 0; width: max-content; padding: 5px 7px; border-radius: 5px; color: #56695d; background: #fffffff0; box-shadow: 0 2px 8px #2c453812; content: "ลากภาพเพื่อหมุน · คลิกลูกศรในภาพเพื่อเดิน"; font-size: 9px; pointer-events: none; }
 
 @media (max-width: 650px) {
